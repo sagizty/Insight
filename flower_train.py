@@ -12,11 +12,12 @@ from skimage import transform, io
 from keras import layers
 from keras import models
 from keras import optimizers, losses
+from keras.preprocessing import image
 import matplotlib.pyplot as plt
 from keras.utils import to_categorical
+import cv2
 
 
-# 定义读取图片的函数：read_img()
 def processing_data(all_data_path, l=224, w=224, font='/'):
     """
     读取全部数据，转化为一个数据集npy与一个标签集npy
@@ -46,14 +47,126 @@ def processing_data(all_data_path, l=224, w=224, font='/'):
     return np.asarray(imgs, np.float32), np.asarray(labels, np.int32)  # np.float32是类型 后面两个变量是没有进行np.asarray
 
 
-# 定义随机打乱数据集的函数：shuffle_data()
-def shuffle_data(data, label, ratio=0.8):  # 训练集比例 ratio = 0.8
+def a_img_preprocess(img_path, w=224, h=224):
+    """
+    加载一个图片并进行预处理，格式转换等
+    :param img_path: 图片文件名
+           target_size: 要加载图片的缩放大小
+                        之后在image包里面是一个tuple元组类型(w,h)
+    :return: 预处理过的图像文件
+    """
+    img = image.load_img(img_path, target_size=(w, h))
+    img = image.img_to_array(img)  # 转换成数组形式
+    # print(img.shape)
+    '''
+    img = np.expand_dims(img, axis=0)  # 为图片增加一维batchsize，直接设置为1
+    img = preprocess_input(img)  # 对图像进行标准化
+    '''
+
+    return img
+
+
+def save_pic(img_out_path, superimopsed_img):
+    cv2.imwrite(img_out_path, superimopsed_img)
+
+
+def rotate_img(img):
+    """
+    随机旋转图像
+    :param img: 输入图像
+    :return:
+    """
+    (height, width) = img.shape[:2]
+
+    random_angle = np.random.randint(1, 360)
+
+    center = (height // 2, width // 2)
+    matrix = cv2.getRotationMatrix2D(center, random_angle, 1)
+    # 旋转图像
+    rotate_img = cv2.warpAffine(img, matrix, (width, height))
+    # print(rotate_img.shape)
+    return rotate_img
+
+
+def translate_img(img):
+    """
+    随机平移图像
+    :param img: 输入图像
+    :return:
+    """
+    (height, width) = img.shape[:2]
+    # 平移矩阵(浮点数类型)  x_shift +右移 -左移  y_shift -上移 +下移
+    x_shift = np.random.randint(-100, 100)
+    y_shift = np.random.randint(-100, 100)
+
+    matrix = np.float32([[1, 0, x_shift], [0, 1, y_shift]])
+    # 平移图像
+    trans_img = cv2.warpAffine(img, matrix, (width, height))
+
+    return trans_img
+
+
+def enhance_data(data, label):
+    """
+    数据增强，将图片旋转平移之后，数据量增加了
+    :param data:
+    :param label:
+    :return:
+    """
+    enhanced_data = []
+    enhanced_label = []
+
+    for i in range(len(data)):
+        slices = data[i]
+        s_label = label[i]
+
+        enhanced_data.append(slices)
+        enhanced_data.append(translate_img(rotate_img(slices)))
+        enhanced_data.append(translate_img(rotate_img(slices)))
+
+        enhanced_label.append(s_label)
+        enhanced_label.append(s_label)
+        enhanced_label.append(s_label)
+
+    # 转化格式
+    enhanced_data, enhanced_label = np.asarray(enhanced_data, np.float32), np.asarray(enhanced_label, np.int32)
+    # 打乱顺序
+    enhanced_data, enhanced_label = shuffle_data(enhanced_data, enhanced_label)
+
+    print("data enhanced")
+
+    return np.asarray(enhanced_data, np.float32), np.asarray(enhanced_label, np.int32)
+
+
+def shuffle_data(data, label):
+    """
+    随机打乱数据集的函数
+    :param data: 打乱前的数据npy
+    :param label: 打乱前的标签npy
+
+    :return: data, label
+    """
     # 打乱顺序
     data_size = data.shape[0]  # 数据集个数
     arr = np.arange(data_size)  # 生成0到datasize个数
     np.random.shuffle(arr)  # 随机打乱arr数组
     data = data[arr]  # 将data以arr索引重新组合
     label = label[arr]  # 将label以arr索引重新组合
+
+    return np.asarray(data, np.float32), np.asarray(label, np.int32)
+
+
+def split_data(data, label, ratio=0.8):  # 训练集比例 ratio = 0.8
+    """
+    随机划分训练集与测试集的数据与标签
+    :param data: 打乱前的数据npy
+    :param label: 打乱前的标签npy
+    :param ratio: 训练集占总数据的比例
+
+    :return: x是数据，y是标签
+    """
+    # 打乱顺序
+    data, label = shuffle_data(data, label)
 
     num = np.int(len(data) * ratio)
     # x是数据，y是标签
@@ -76,7 +189,7 @@ def uploading(data, label, feature_dim_1=224, feature_dim_2=224, channel=3):
     :return:
     """
 
-    x_train, x_test, y_train, y_test = shuffle_data(data, label)
+    x_train, x_test, y_train, y_test = split_data(data, label)
 
     x_train = x_train.reshape(x_train.shape[0], feature_dim_1, feature_dim_2, channel)  # 数据数量，维度，宽度，核通道数（颜色）
     x_test = x_test.reshape(x_test.shape[0], feature_dim_1, feature_dim_2, channel)
@@ -153,8 +266,8 @@ def vgg_model(feature_dim_1=224, feature_dim_2=224, channel=3, target=5):
     return model
 
 
-def begin(project_data_path, all_data_path, model_h5name, process_data=True, epochs=15, l=224, w=224, c=3, target=5,
-          font='/'):
+def begin(project_data_path, all_data_path, model_h5name, reprocess_data=True, batch_size=100, epochs=15, l=224, w=224,
+          c=3, target=5, font='/'):
     """
     总函数
     :param project_data_path: 项目文件路径
@@ -171,14 +284,17 @@ def begin(project_data_path, all_data_path, model_h5name, process_data=True, epo
     :param font:
     :return:
     """
-    # 处理数据
-    if process_data:
+    # 读取数据
+    if reprocess_data:
         data, label = processing_data(all_data_path, l, w, font=font)
         np.save(project_data_path + font + "data.npy", data)
         np.save(project_data_path + font + "label.npy", label)
     else:
         data = np.load(project_data_path + font + "data.npy")
         label = np.load(project_data_path + font + "label.npy")
+
+    # 数据增强
+    data, label = enhance_data(data, label)
 
     # 调模型，编译模型
     model = vgg_model(l, w, c, target)
@@ -193,7 +309,7 @@ def begin(project_data_path, all_data_path, model_h5name, process_data=True, epo
 
     # 训练
     # plot(model, to_file='model1.png', show_shapes=True) #keras模型可视化
-    history = model.fit(x_train, y_train_hot, batch_size=100, epochs=epochs, verbose=1,
+    history = model.fit(x_train, y_train_hot, batch_size=batch_size, epochs=epochs, verbose=1,
                         validation_data=(x_test, y_test_hot))
 
     # 保存训练结果+画图呈现训练效果
@@ -204,15 +320,43 @@ def begin(project_data_path, all_data_path, model_h5name, process_data=True, epo
     draw_training_summary(history, picpath)
 
 
+font = '/'
 # 定义超参数
 l = 224
 w = 224
 c = 3  # 颜色
 target = 5  # 花的种类数量
 
+# 定义训练参数
+batch_size=100
+epochs=20
+'''
+# local host
 project_data_path = '/Users/zhangtianyi/Study/cam_flowers'
 all_data_path = '/Users/zhangtianyi/Study/cam_flowers/train_data'  # 所有图片的总路径(目录)
 model_h5name = 'five_flowers_categorical_vgg16.h5'
 plot_pic_path = 'training result.jpg'
+'''
 
-begin(project_data_path, all_data_path, model_h5name, True, 15, l, w, c, font='/')
+# remote host
+# 项目数据位置
+project_data_path = '/home/zty/Insight'
+# 所有图片的总路径(目录)
+all_data_path = '/home/zty/flower'
+# 训练后模型的位置
+model_h5name = 'five_flowers_categorical_vgg16.h5'
+model_path = project_data_path + font + model_h5name
+
+# 测试图像保存位置
+plot_pic_path = project_data_path + font + 'resultphoto.jpg'
+# begin(project_data_path, all_data_path, model_h5name, True, 15, l, w, c, font='/')
+
+test_pic_path = all_data_path + font + 'daisy/100080576_f52e8ee070_n.jpg'
+
+'''
+slices = a_img_preprocess(test_pic_path, w=224, h=224)
+new_img = translate_img(rotate_img(slices))
+save_pic(plot_pic_path, new_img)
+'''
+
+begin(project_data_path, all_data_path, model_h5name, reprocess_data=False)

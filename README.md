@@ -12,5 +12,13 @@
 需要训练一个模型去自动判断图片中是什么花
 
 
-数据：
+下载到本地的数据：
 链接: https://pan.baidu.com/s/11H48zg0YPKJfB6l2gWC0VQ  密码: vu26
+
+
+
+
+
+Tensorflow官网的流程，说的非常非常详细！
+大家看这个作为例子更好
+https://tensorflow.google.cn/tutorials/load_data/images

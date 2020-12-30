@@ -26,17 +26,23 @@ project_data_path = '/Users/zhangtianyi/Study/cam_flowers'
 
 #big server 
 project_data_path = '/home/FLOWER-project/Insight'
-'''
-
-font = '/'
 
 # little server host
 # 项目数据位置
 project_data_path = "/home/zty/Insight"
+'''
 
-epochs = 1
+font = '/'
+
+# local host
+# 项目数据位置
+project_data_path = '/Users/zhangtianyi/Study/cam_flowers'
+
+epochs = 3
 width = 224
 length = 224
+std = 1
+num_classes = 5
 
 
 def split_data_multi_channel(data, label, percent=0.2):
@@ -86,6 +92,14 @@ class VGG2D_Net(tf.keras.Model):
         return conv, pred
 
 
+def core_deal(data, cam):
+    cam = 1 + cam / (1 + sum(cam))  # 这里是把所有元素加和然后去做除法，为了防止sum（cam）等于0，选择加一个1，这样对整体不影响，其实可以用softmax，但是我特么不是懒得查么
+    a = np.expand_dims(data[:, :, 0] * cam, axis=2)
+    b = np.expand_dims(data[:, :, 0] * cam, axis=2)
+    c = np.expand_dims(data[:, :, 0] * cam, axis=2)
+    return np.concatenate((a, b, c), axis=2)
+
+
 def to_loader(data, label, batch_size=64):
     loader = tf.data.Dataset.from_tensor_slices((data, label))
     loader = loader.shuffle(buffer_size=1000)
@@ -95,9 +109,25 @@ def to_loader(data, label, batch_size=64):
     # 读取数据
 
 
-def train(trainloader, testloader, model, epochs=epochs):
-    newdata = []
-    newlabel = []
+def cal_avg(l):
+    a = 0
+    c = 0
+    for i in l:
+        c += 1
+        a += 1
+    return a / c
+
+
+def train(trainloader, testloader, model, epochs=epochs, std=std, num_classes=num_classes):
+    datas = []
+    labels = []
+    cam_list = []
+
+    for idx, (data, label) in enumerate(iter(trainloader)):
+        for m, n in zip(data, label):
+            datas.append(m)
+            labels.append(n)
+
     optimizer = tf.keras.optimizers.Adam(0.0005, clipvalue=5.0)
     Loss = tf.keras.losses.CategoricalCrossentropy()
 
@@ -105,53 +135,72 @@ def train(trainloader, testloader, model, epochs=epochs):
     train_accuracy = tf.keras.metrics.SparseCategoricalAccuracy(name='train_accuracy')
 
     for epoch in range(epochs):
+        print("epoch:==========================", epoch)
 
-        if epoch < 10:
-            print("epoch:==========================", epoch)
+        if epoch < std:
+            loss_list = []
+            auc_list = []
             for idx, (data, label) in enumerate(iter(trainloader)):
                 with tf.GradientTape() as tape:
                     conv, pred = model(data)
-                    loss = Loss(tf.keras.utils.to_categorical(label, num_classes=5), pred)
+                    loss = Loss(tf.keras.utils.to_categorical(label, num_classes=num_classes), pred)
 
                 gradient = tape.gradient(loss, model.trainable_variables)
                 optimizer.apply_gradients(zip(gradient, model.trainable_variables))
-                print(train_loss(loss))
-                print(train_accuracy(label, pred))
+                loss_list.append(train_loss(loss))
+                auc_list.append(train_accuracy(label, pred))
+            print("训练集第{}epoch的损失是:{},auc为:{}".format(epoch, cal_avg(loss_list), cal_avg(auc_list)))
 
+            loss_list = []
+            auc_list = []
             for idx, (data, label) in enumerate(iter(testloader)):
                 with tf.GradientTape() as tape:
                     conv, pred = model(data)
+                    loss = Loss(tf.keras.utils.to_categorical(label, num_classes=num_classes), pred)
 
-                    print(train_accuracy(label, pred))
+                loss_list.append(train_loss(loss))
+                auc_list.append(train_accuracy(label, pred))
+            print("测试集第{}epoch的损失是:{},auc为:{}".format(epoch, cal_avg(loss_list), cal_avg(auc_list)))
 
         else:  # 第十轮之后开始使用cam自监督
 
-            if len(newdata) != 0 and len(newlabel) != 0:  # 这时候cam里什么都没有
-                trainloader = to_loader(np.asarray(newdata), np.asarray(newlabel))  # 经过cam处理的新数据
-                newdata = []
-                newlabel = []
+            if len(cam_list) != 0:  # 这时候cam里什么都没有
+                temp = []
+                for d, c in zip(datas, cam_list):
+                    temp.append(core_deal(d, c))
+                    # temp.append(final)
+                trainloader = to_loader(temp, labels)  # 经过cam处理的新数据
+                cam_list = []  # 将之前的cam清空
+                print("data has changed now and the camlist is :", len(cam_list))
 
-            for (data, label) in zip((iter(trainloader)), cam):
+            loss_list = []
+            auc_list = []
+            for (data, label) in (iter(trainloader)):
                 with tf.GradientTape() as tape:
                     conv, pred = model(data)
-                    loss = Loss(tf.keras.utils.to_categorical(label, num_classes=5), pred)
+                    loss = Loss(tf.keras.utils.to_categorical(label, num_classes=num_classes), pred)
 
                 gradient = tape.gradient(loss, model.trainable_variables)
                 optimizer.apply_gradients(zip(gradient, model.trainable_variables))
-                print(train_loss(loss))
-                print(train_accuracy(label, pred))
+                loss_list.append(train_loss(loss))
+                auc_list.append(train_accuracy(label, pred))
+            print("训练集第{}epoch的损失是:{},auc为:{}".format(epoch, cal_avg(loss_list), cal_avg(auc_list)))
 
-                for m, n in zip(data, label):
-                    cam = gradcam(model, tf.expand_dims(m, axis=0), tf.expand_dims(n, axis=0))
-                    # !!最需要补充的细节就是下面的小运算
-                    newdata.append(m * (1 + cam))  # 此处需要对cam做一个类似于softmax的，让他介于0-1，然后加上1和m逐元素相乘，生成新的数据
-                    newlabel.append(n)
+            for m, n in zip(datas, labels):
+                cam = gradcam(model, tf.expand_dims(m, axis=0), tf.expand_dims(n, axis=0))
+                cam_list.append(cam)  # datas里的数据和cam一一对应，
+            print("The new cams have been got")
 
+            loss_list = []
+            auc_list = []
             for idx, (data, label) in enumerate(iter(testloader)):
                 with tf.GradientTape() as tape:
                     conv, pred = model(data)
+                    loss = Loss(tf.keras.utils.to_categorical(label, num_classes=num_classes), pred)
 
-                print(train_accuracy(label, pred))
+                loss_list.append(train_loss(loss))
+                auc_list.append(train_accuracy(label, pred))
+            print("测试集第{}epoch的损失是:{},auc为:{}".format(epoch, cal_avg(loss_list), cal_avg(auc_list)))
 
     return model
 
@@ -181,11 +230,9 @@ def gradcam(model, inputs, index=None):
 def main():
     epochs = 10
 
-    # data = np.load(project_data_path + font + "data.npy")
-    # label = np.load(project_data_path + font + "label.npy")
+    data = np.load(project_data_path + font + "data.npy")
+    label = np.load(project_data_path + font + "label.npy")
 
-    data = np.zeros((10, 224, 224, 3))
-    label = np.zeros((10, 1))
     print(type(data), data.shape, type(label), label.shape)
     trainx, trainy, testx, testy = split_data_multi_channel(data, label)
     print(trainx.shape, trainy.shape, testx.shape, testy.shape)
@@ -196,7 +243,7 @@ def main():
     model = VGG2D_Net()
     modeled = train(trainloader, testloader, model)
 
-    notify.send_log("1612085779@qq.com")
+    notify.send_log(("1612085779@qq.com", "foe3305@163.com"))
 
 
 if __name__ == '__main__': main()

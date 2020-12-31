@@ -1,5 +1,5 @@
 """
-版本 2020.12.30 11:30
+版本 2020.12.30 12:00
 这个文件用来自动发送 输出log + 性能监控log + 追加的文件 到指定邮箱列表中
 
 维护工作：
@@ -17,6 +17,7 @@ import notify
 # 程序代码
 ...
 
+notify.add_text("whatever u want to say")
 notify.add_file(file_name） # 追加邮件附件的文件路径，可以是文件/文件夹（会自动zip），只需要在任意位置调用这个函数即可，可多次用
 
 ...
@@ -403,6 +404,11 @@ def send_log(mail_list=defaut_receivers, log_cache_name=log_cache_name, log_moni
     else:
         print("mail_list problem occur!")
         return -1
+
+    # 处理文本
+    mail_content = log_monitor.text_content
+    for i in mail_content:
+        message.attach(MIMEText(i, 'plain', 'utf-8'))
 
     # 处理追加附件
     additional_file_list = log_monitor.additional_file_list

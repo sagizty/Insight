@@ -1,5 +1,5 @@
 """
-版本 2020.12.30 10:30
+版本 2020.12.30 11:00
 这个文件用来自动发送 输出log + 性能监控log + 追加的文件 到指定邮箱列表中
 
 维护工作：
@@ -333,7 +333,7 @@ def add_file(file_name, current_stdout=current_stdout):
     :return:
     """
     current_stdout.add_a_file(file_name=file_name)
-    print(file_name, " has been added to the mail attachment list")
+    print(file_name, " has been added to the mail attachment list as an additional file")
 
 
 def send_log(mail_list=defaut_receivers, log_cache_name=log_cache_name, current_stdout=current_stdout,
@@ -356,7 +356,8 @@ def send_log(mail_list=defaut_receivers, log_cache_name=log_cache_name, current_
     time_start = current_stdout.start_time
     time_end = time.time()
 
-    print("\nstart time:", time.strftime('%Y_%m_%d  %H:%M:%S', time.localtime(time_start)))
+    print("\nProcessing finished !")
+    print("start time:", time.strftime('%Y_%m_%d  %H:%M:%S', time.localtime(time_start)))
     print("end time:", time.strftime('%Y_%m_%d  %H:%M:%S', time.localtime(time_end)))
 
     # 定log文件名
@@ -364,16 +365,67 @@ def send_log(mail_list=defaut_receivers, log_cache_name=log_cache_name, current_
     processing_log_name = call_func_name + '__' + time.strftime('%Y_%m_%d %H_%M_%S',
                                                                 time.localtime(time_start)) + '_log'
 
-    print("sending the email attaching with file：\n", processing_log_name, '\n', server_log_name, '\nas ', log_type)
-
-    additional_file_list = current_stdout.additional_file_list
-    current_stdout.close_log_and_put_back()  # log close，于是可以读到log; 恢复还原原本的sys.stdout，同时阻断log生成.
+    print("\nPreparing the email with auto log file :\n", processing_log_name, '\n', server_log_name, '\nas ', log_type)
 
     # 定发送对象
     if type(mail_list) == str:
         mail_list = [mail_list]
     else:
         mail_list = list(mail_list)
+
+    # 确定邮件题目
+    mail_title = '[LOG] ' + processing_log_name
+
+    # 组织email内容
+    message = MIMEMultipart()
+    message['Subject'] = mail_title
+    message['From'] = mail_user
+
+    # 如果是收件人列表，做编码处理
+    if len(mail_list) > 1:
+        message['To'] = ";".join(mail_list)
+    elif len(mail_list) == 1:  # 如果只是一个邮箱， 就发到这个邮箱
+        message['To'] = mail_list[0]
+    else:
+        print("mail_list problem occur!")
+        return -1
+
+    # 处理追加附件
+    additional_file_list = current_stdout.additional_file_list
+
+    if len(additional_file_list) >0:
+        print("\nThe email attaching with additional files :")
+        for i in additional_file_list:
+
+            file_name = str(i).split('/')[-1]
+
+            if os.path.isdir(i):  # 是文件夹, 要压缩
+                file_loc = './' + file_name + '.zip'
+                zipDir(i, file_loc)
+                file_name = file_name + '.zip'
+
+            else:  # 是文件
+                file_loc = i
+
+            with open(file_loc, 'rb') as Af:
+                file = Af.read()
+            try:
+                Af.close()
+                # 添加附件
+                log_part = MIMEText(file, 'base64', 'utf-8')
+                log_part["Content-Type"] = 'application/octet-stream'
+                # 这里的filename可以任意写，写什么名字，邮件中显示什么名字
+                log_part["Content-Disposition"] = 'attachment; filename="%s"' % file_name
+                message.attach(log_part)
+                print("An additional file has been added to the mail:", file_name)
+            except:
+                print("Erro occur in adding additional file:", file_name)
+            else:
+                print("An additional file has been added to the mail:", file_name)
+        print('\n')
+
+    # 阻断log生成
+    current_stdout.close_log_and_put_back()  # log close，于是可以读到log; 恢复还原原本的sys.stdout，同时阻断log生成.
 
     # 调取processing_log
     try:
@@ -404,23 +456,6 @@ def send_log(mail_list=defaut_receivers, log_cache_name=log_cache_name, current_
     else:
         print("server log catched")
 
-    # 确定邮件题目
-    mail_title = '[LOG] ' + processing_log_name
-
-    # 组织email内容
-    message = MIMEMultipart()
-    message['Subject'] = mail_title
-    message['From'] = mail_user
-
-    # 如果是收件人列表，做编码处理
-    if len(mail_list) > 1:
-        message['To'] = ";".join(mail_list)
-    elif len(mail_list) == 1:  # 如果只是一个邮箱， 就发到这个邮箱
-        message['To'] = mail_list[0]
-    else:
-        print("mail_list problem occur!")
-        return -1
-
     # 附件1：processing_log
     log_part = MIMEText(processing_log, 'base64', 'utf-8')
     log_part["Content-Type"] = 'application/octet-stream'
@@ -436,29 +471,6 @@ def send_log(mail_list=defaut_receivers, log_cache_name=log_cache_name, current_
     log_part[
         "Content-Disposition"] = 'attachment; filename="%s"' % file  # 这里的filename可以任意写，写什么名字，邮件中显示什么名字
     message.attach(log_part)
-
-    for i in additional_file_list:
-
-        file_name = str(i).split('/')[-1]
-
-        if os.path.isdir(i):  # 是文件夹, 要压缩
-            file_loc = './' + file_name + '.zip'
-            zipDir(i, file_loc)
-            file_name = file_name + '.zip'
-
-        else:  # 是文件
-            file_loc = i
-
-        with open(file_loc, 'rb') as f:
-            file = f.read()
-            f.close()
-            # 添加附件
-            log_part = MIMEText(file, 'base64', 'utf-8')
-            log_part["Content-Type"] = 'application/octet-stream'
-            # 这里的filename可以任意写，写什么名字，邮件中显示什么名字
-            log_part["Content-Disposition"] = 'attachment; filename="%s"' % file_name
-            message.attach(log_part)
-            print("An additional file has been added to the mail:", file_name)
 
     # 实例化，也是登录的过程
     smtp = smtplib.SMTP_SSL(mail_host)

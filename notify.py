@@ -417,7 +417,6 @@ def send_log(mail_list=defaut_receivers, log_cache_name=log_cache_name, current_
                 # 这里的filename可以任意写，写什么名字，邮件中显示什么名字
                 log_part["Content-Disposition"] = 'attachment; filename="%s"' % file_name
                 message.attach(log_part)
-                print("An additional file has been added to the mail:", file_name)
             except:
                 print("Erro occur in adding additional file:", file_name)
             else:

@@ -1,5 +1,5 @@
 """
-版本 2020.12.30 11:00
+版本 2020.12.30 11:30
 这个文件用来自动发送 输出log + 性能监控log + 追加的文件 到指定邮箱列表中
 
 维护工作：
@@ -267,6 +267,7 @@ def make_print_save_to_file(path='./'):
             self.terminal = sys.stdout
             self.log = open(os.path.join(path, processing_log_name), "a", encoding='utf8', )
             self.start_time = time.time()
+            self.text_content = []
             self.additional_file_list = []
 
         def write(self, message):
@@ -280,20 +281,23 @@ def make_print_save_to_file(path='./'):
             self.log.close()
             sys.stdout = self.ori_stdout  # ori_stdout是原本的sys.stdout， 现在用来恢复
 
+        def add_a_text(self, text_input):
+            self.text_content.append(text_input)
+
         def add_a_file(self, file_name):
             self.additional_file_list.append(file_name)
 
     fileName = datetime.datetime.now().strftime('LOG_Cache_' + '%Y_%m_%d_%H_%M')
     sys.stdout = Logger(fileName + '.log', path=path)
 
-    current_stdout = sys.stdout  # 现在的被重写的sys.stdout对象
+    log_monitor = sys.stdout  # 现在的被重写的sys.stdout对象
 
     log_name = path + fileName + '.log'
 
     # 这里输出之后的所有的其他代码中的输出的print 内容即将自动备份写入到日志Date 年_月_日.log里
     print(fileName.center(60, '*'))  # 首先写个日志头
 
-    return log_name, current_stdout
+    return log_name, log_monitor
 
 
 # 初始化，配置参数：
@@ -308,7 +312,7 @@ mail_pass = '3cvPbaNucRHvNiJb'  # 腾讯企业邮箱的授权码
 sender = mail_user
 defaut_receivers = ('foe3305@163.com', '476017732@qq.com', 'wuyuzhuo@visionwyz.com')
 
-log_cache_name, current_stdout = make_print_save_to_file()  # 重写print, 默认调用时就要执行
+log_cache_name, log_monitor = make_print_save_to_file()  # 重写print, 默认调用时就要执行
 
 # 初始化monitor 监控log部分
 lock = threading.Lock()
@@ -325,24 +329,34 @@ sample_time = 5  # 每次监控采样的间隔时间 5s
 monitor_process, server_log_name = start_monitor(server_log_dir, server_log_name, report_time, sample_time)
 
 
-def add_file(file_name, current_stdout=current_stdout):
+def add_text(text_input, log_monitor=log_monitor):
+    """
+    设置文件内容
+    :param text_input: 追加的文件内容
+    :param log_monitor: 系统对象（不需要管）
+    :return:
+    """
+    log_monitor.add_a_text(text_input=text_input)
+
+
+def add_file(file_name, log_monitor=log_monitor):
     """
     追加邮件附件，可以是文件/文件夹（会自动zip），只需要调用这个函数即可
     :param file_name: 追加的附件路径，可以是文件/文件夹（会自动zip）
-    :param current_stdout: 系统对象（不需要管）
+    :param log_monitor: 系统对象（不需要管）
     :return:
     """
-    current_stdout.add_a_file(file_name=file_name)
+    log_monitor.add_a_file(file_name=file_name)
     print(file_name, " has been added to the mail attachment list as an additional file")
 
 
-def send_log(mail_list=defaut_receivers, log_cache_name=log_cache_name, current_stdout=current_stdout,
+def send_log(mail_list=defaut_receivers, log_cache_name=log_cache_name, log_monitor=log_monitor,
              server_log_dir=server_log_dir, server_log_name=server_log_name, log_type=log_type):
     """
     :param mail_list: 发送file_name到mail_list中的收件人
     mail_list可以是列表['xxx@xx.com','xxx@xx.com']或字符串'xxx@xx.com'
     :param log_cache_name: Log的Cache文件，如果报错那么就只有这个记录，不报错会存为正式的log
-    :param current_stdout: 重写的sys.stdout对象
+    :param log_monitor: 重写的sys.stdout对象
     :param log_type: 日志格式
     :param server_log_dir: 服务器server_log路径
     :param server_log_name: 服务器server_log名字
@@ -353,7 +367,7 @@ def send_log(mail_list=defaut_receivers, log_cache_name=log_cache_name, current_
     stop_monitor(monitor_process)
 
     # 确定时间
-    time_start = current_stdout.start_time
+    time_start = log_monitor.start_time
     time_end = time.time()
 
     print("\nProcessing finished !")
@@ -391,7 +405,7 @@ def send_log(mail_list=defaut_receivers, log_cache_name=log_cache_name, current_
         return -1
 
     # 处理追加附件
-    additional_file_list = current_stdout.additional_file_list
+    additional_file_list = log_monitor.additional_file_list
 
     if len(additional_file_list) >0:
         print("\nThe email attaching with additional files :")
@@ -424,7 +438,7 @@ def send_log(mail_list=defaut_receivers, log_cache_name=log_cache_name, current_
         print('\n')
 
     # 阻断log生成
-    current_stdout.close_log_and_put_back()  # log close，于是可以读到log; 恢复还原原本的sys.stdout，同时阻断log生成.
+    log_monitor.close_log_and_put_back()  # log close，于是可以读到log; 恢复还原原本的sys.stdout，同时阻断log生成.
 
     # 调取processing_log
     try:

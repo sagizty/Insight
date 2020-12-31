@@ -1,9 +1,9 @@
 """
-版本 2020.12.30 01:00
-这个文件用来自动发送log文件到指定邮箱
+版本 2020.12.30 10:30
+这个文件用来自动发送 输出log + 性能监控log + 追加的文件 到指定邮箱列表中
 
 维护工作：
-生成log部分，张天翊
+生成log部分/追加附件，张天翊
 监控log部分，吕尚青
 发送log部分，吴雨卓
 
@@ -17,7 +17,11 @@ import notify
 # 程序代码
 ...
 
-notify.send_log() #建议在自己代码的最后一段执行部分之后使用就行
+notify.add_file(file_name） # 追加邮件附件的文件路径，可以是文件/文件夹（会自动zip），只需要在任意位置调用这个函数即可，可多次用
+
+...
+
+notify.send_log()  # 在自己代码的最后一段执行部分之后使用就行
 
 -------------------------------------------------------------------------------
 
@@ -53,6 +57,7 @@ notify.send_log(“1111@111.com”)
 """
 
 import smtplib
+import zipfile
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 # from email.header import Header
@@ -125,7 +130,7 @@ def server_monitor_process(log_dir, log_name='server_status.log', report_time=30
             mem_avg_list.append(calc_avg_mem_usage_percentage(mem_list))
             cpu_max_list.append(calc_max_cpu_usage(cpu_list))
             mem_max_list.append(max(mem_list))
-            save_log(cpu_avg_list[-1], mem_avg_list[-1], log_dir, log_name)
+            save_server_log(cpu_avg_list[-1], mem_avg_list[-1], log_dir, log_name)
 
             cpu_avg = calc_avg_mem_usage_percentage(cpu_avg_list)
             mem_avg = calc_avg_mem_usage_percentage(mem_avg_list)
@@ -141,7 +146,7 @@ def server_monitor_process(log_dir, log_name='server_status.log', report_time=30
             mem_avg_list.append(calc_avg_mem_usage_percentage(mem_list))
             cpu_max_list.append(calc_max_cpu_usage(cpu_list))
             mem_max_list.append(max(mem_list))
-            save_log(cpu_avg_list[-1], mem_avg_list[-1], log_dir, log_name)
+            save_server_log(cpu_avg_list[-1], mem_avg_list[-1], log_dir, log_name)
             cpu_list = []
             mem_list = []
 
@@ -177,7 +182,7 @@ def calc_avg_mem_usage_percentage(mem_usage_list_divided_by_time):
     return round(avg_mem_usage, 2)
 
 
-def save_log(cpu_usage, mem_usage, log_dir, log_name):
+def save_server_log(cpu_usage, mem_usage, log_dir, log_name):
     now_time = time.strftime('%m月%d日 %H:%M:%S', time.localtime(time.time()))
     format_save = r'时间: %s   | CPU平均占用率: %s  | 内存占用率: %s  ' % \
                   (now_time, str(cpu_usage), str(mem_usage))
@@ -231,6 +236,23 @@ def alter_log_name(log_name):
     return new_name
 
 
+def zipDir(dirpath, outFullName):
+    """
+    压缩指定文件夹到指定路径
+    :param dirpath: 目标文件夹路径:1212/12/c
+    :param outFullName:  'aaa/bbb/c.zip'
+    :return: 无
+    """
+    zip = zipfile.ZipFile(outFullName, 'w', zipfile.ZIP_DEFLATED)
+    for path, dirnames, filenames in os.walk(dirpath):
+        # 去掉目标和路径，只对目标文件夹下边的文件及文件夹进行压缩（包括父文件夹本身）
+        this_path = os.path.abspath('.')
+        fpath = path.replace(this_path, '')
+        for filename in filenames:
+            zip.write(os.path.join(path, filename), os.path.join(fpath, filename))
+    zip.close()
+
+
 def make_print_save_to_file(path='./'):
     """
     重写print,使得之后所有print内容都会被保存到log中， 默认调用时就要执行
@@ -240,11 +262,12 @@ def make_print_save_to_file(path='./'):
     """
 
     class Logger(object):
-        def __init__(self, filename="LOG_Default.log", path="./"):
+        def __init__(self, processing_log_name="LOG_Default.log", path="./"):
             self.ori_stdout = sys.stdout
             self.terminal = sys.stdout
-            self.log = open(os.path.join(path, filename), "a", encoding='utf8', )
+            self.log = open(os.path.join(path, processing_log_name), "a", encoding='utf8', )
             self.start_time = time.time()
+            self.additional_file_list = []
 
         def write(self, message):
             self.terminal.write(message)
@@ -256,6 +279,9 @@ def make_print_save_to_file(path='./'):
         def close_log_and_put_back(self):
             self.log.close()
             sys.stdout = self.ori_stdout  # ori_stdout是原本的sys.stdout， 现在用来恢复
+
+        def add_a_file(self, file_name):
+            self.additional_file_list.append(file_name)
 
     fileName = datetime.datetime.now().strftime('LOG_Cache_' + '%Y_%m_%d_%H_%M')
     sys.stdout = Logger(fileName + '.log', path=path)
@@ -299,6 +325,17 @@ sample_time = 5  # 每次监控采样的间隔时间 5s
 monitor_process, server_log_name = start_monitor(server_log_dir, server_log_name, report_time, sample_time)
 
 
+def add_file(file_name, current_stdout=current_stdout):
+    """
+    追加邮件附件，可以是文件/文件夹（会自动zip），只需要调用这个函数即可
+    :param file_name: 追加的附件路径，可以是文件/文件夹（会自动zip）
+    :param current_stdout: 系统对象（不需要管）
+    :return:
+    """
+    current_stdout.add_a_file(file_name=file_name)
+    print(file_name, " has been added to the mail attachment list")
+
+
 def send_log(mail_list=defaut_receivers, log_cache_name=log_cache_name, current_stdout=current_stdout,
              server_log_dir=server_log_dir, server_log_name=server_log_name, log_type=log_type):
     """
@@ -324,9 +361,12 @@ def send_log(mail_list=defaut_receivers, log_cache_name=log_cache_name, current_
 
     # 定log文件名
     call_func_name = sys._getframe(1).f_code.co_filename.split('/')[-1]
-    file_name = call_func_name + '__' + time.strftime('%Y_%m_%d %H_%M_%S', time.localtime(time_start)) + '_log'
+    processing_log_name = call_func_name + '__' + time.strftime('%Y_%m_%d %H_%M_%S',
+                                                                time.localtime(time_start)) + '_log'
 
-    print("sending the email attaching with file：\n", file_name, '\n', server_log_name, '\nas ', log_type)
+    print("sending the email attaching with file：\n", processing_log_name, '\n', server_log_name, '\nas ', log_type)
+
+    additional_file_list = current_stdout.additional_file_list
     current_stdout.close_log_and_put_back()  # log close，于是可以读到log; 恢复还原原本的sys.stdout，同时阻断log生成.
 
     # 定发送对象
@@ -344,7 +384,7 @@ def send_log(mail_list=defaut_receivers, log_cache_name=log_cache_name, current_
         if processing_log[0] is not '*':
             print("processing log title erro")
         else:
-            os.rename(log_cache_name, file_name + '.log')
+            os.rename(log_cache_name, processing_log_name + '.log')
     except:
         print("processing log status erro")
         return -1
@@ -365,7 +405,7 @@ def send_log(mail_list=defaut_receivers, log_cache_name=log_cache_name, current_
         print("server log catched")
 
     # 确定邮件题目
-    mail_title = '[LOG] ' + file_name
+    mail_title = '[LOG] ' + processing_log_name
 
     # 组织email内容
     message = MIMEMultipart()
@@ -384,7 +424,7 @@ def send_log(mail_list=defaut_receivers, log_cache_name=log_cache_name, current_
     # 附件1：processing_log
     log_part = MIMEText(processing_log, 'base64', 'utf-8')
     log_part["Content-Type"] = 'application/octet-stream'
-    file = file_name + log_type
+    file = processing_log_name + log_type
     log_part[
         "Content-Disposition"] = 'attachment; filename="%s"' % file  # 这里的filename可以任意写，写什么名字，邮件中显示什么名字
     message.attach(log_part)
@@ -396,6 +436,29 @@ def send_log(mail_list=defaut_receivers, log_cache_name=log_cache_name, current_
     log_part[
         "Content-Disposition"] = 'attachment; filename="%s"' % file  # 这里的filename可以任意写，写什么名字，邮件中显示什么名字
     message.attach(log_part)
+
+    for i in additional_file_list:
+
+        file_name = str(i).split('/')[-1]
+
+        if os.path.isdir(i):  # 是文件夹, 要压缩
+            file_loc = './' + file_name + '.zip'
+            zipDir(i, file_loc)
+            file_name = file_name + '.zip'
+
+        else:  # 是文件
+            file_loc = i
+
+        with open(file_loc, 'rb') as f:
+            file = f.read()
+            f.close()
+            # 添加附件
+            log_part = MIMEText(file, 'base64', 'utf-8')
+            log_part["Content-Type"] = 'application/octet-stream'
+            # 这里的filename可以任意写，写什么名字，邮件中显示什么名字
+            log_part["Content-Disposition"] = 'attachment; filename="%s"' % file_name
+            message.attach(log_part)
+            print("An additional file has been added to the mail:", file_name)
 
     # 实例化，也是登录的过程
     smtp = smtplib.SMTP_SSL(mail_host)

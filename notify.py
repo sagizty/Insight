@@ -1,39 +1,33 @@
 """
-版本 2020.12.30 12:00
-这个文件用来自动发送 输出log + 性能监控log + 追加的文件 到指定邮箱列表中
+版本 2021.1.1 17:00
 
+这个文件用来自动发送 输出log + 性能监控log + 追加的文件 到指定邮箱列表中
+-------------------------------------------------------------------------------
+2021.1.1 17:00  更新内容：本地日志文件保存在程序目录下的log文件夹内
+-------------------------------------------------------------------------------
 维护工作：
 生成log部分/追加附件，张天翊
 监控log部分，吕尚青
 发送log部分，吴雨卓
-
 注意这个函数的顺序很重要，不要改顺序!!!!!!
-
-
 需要监控的程序可在启动时用如下代码调用本功能：
--------------------------------------------------------------------------------
-import notify
 
+import notify
 # 程序代码
 ...
-
 notify.add_text("whatever u want to say")
 notify.add_file(file_name） # 追加邮件附件的文件路径，可以是文件/文件夹（会自动zip），只需要在任意位置调用这个函数即可，可多次用
-
 ...
-
 notify.send_log()  # 在自己代码的最后一段执行部分之后使用就行
-
 -------------------------------------------------------------------------------
 
-说明：
 
+说明：
 输出监控日志格式：
 *****************LOG_Cache_2020_12_31_01_01*****************
 内容
 start time: 2020_12_31  01:01:14
 end time: 2020_12_31  01:02:04
-
 
 性能监控日志格式：
 ============================================
@@ -50,7 +44,6 @@ end time: 2020_12_31  01:02:04
 
 公邮：foe3305@163.com
 密码：ddd888
-
 如果想只发给自己，就把自己邮箱写进去：在自己代码的最后使用
 notify.send_log(“1111@111.com”)
 如果要发给多人，请传入一个包含多个str的元组/列表。
@@ -293,7 +286,7 @@ def make_print_save_to_file(path='./'):
 
     log_monitor = sys.stdout  # 现在的被重写的sys.stdout对象
 
-    log_name = path + fileName + '.log'
+    log_name = os.path.join(path, fileName + '.log')
 
     # 这里输出之后的所有的其他代码中的输出的print 内容即将自动备份写入到日志Date 年_月_日.log里
     print(fileName.center(60, '*'))  # 首先写个日志头
@@ -313,7 +306,11 @@ mail_pass = '3cvPbaNucRHvNiJb'  # 腾讯企业邮箱的授权码
 sender = mail_user
 defaut_receivers = ('foe3305@163.com', '476017732@qq.com', 'wuyuzhuo@visionwyz.com')
 
-log_cache_name, log_monitor = make_print_save_to_file()  # 重写print, 默认调用时就要执行
+place_to_save_log = os.path.join(os.getcwd(), 'log')
+if not os.path.exists(place_to_save_log):
+    os.mkdir(place_to_save_log)
+
+log_cache_name, log_monitor = make_print_save_to_file(place_to_save_log)  # 重写print, 默认调用时就要执行
 
 # 初始化monitor 监控log部分
 lock = threading.Lock()
@@ -321,10 +318,10 @@ lock = threading.Lock()
 finish_process = 0
 
 # 定义监控参数
-server_log_dir = '.'  # 服务器server_log路径
+server_log_dir = place_to_save_log  # 服务器server_log路径
 server_log_name = 'server_status.log'  # 服务器server_log名字
-report_time = 300  # 每次计算均值写入日志的间隔时间 300s
-sample_time = 5  # 每次监控采样的间隔时间 5s
+report_time = 5  # 每次计算均值写入日志的间隔时间 300s
+sample_time = 1  # 每次监控采样的间隔时间 5s
 
 # 开始监控
 monitor_process, server_log_name = start_monitor(server_log_dir, server_log_name, report_time, sample_time)
@@ -361,7 +358,6 @@ def send_log(mail_list=defaut_receivers, log_cache_name=log_cache_name, log_moni
     :param log_type: 日志格式
     :param server_log_dir: 服务器server_log路径
     :param server_log_name: 服务器server_log名字
-
     :return:
     """
     # 此时结束监控
@@ -455,7 +451,7 @@ def send_log(mail_list=defaut_receivers, log_cache_name=log_cache_name, log_moni
         if processing_log[0] is not '*':
             print("processing log title erro")
         else:
-            os.rename(log_cache_name, processing_log_name + '.log')
+            os.rename(log_cache_name, os.path.join(place_to_save_log, processing_log_name + '.log'))
     except:
         print("processing log status erro")
         return -1

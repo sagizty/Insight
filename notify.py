@@ -1,5 +1,5 @@
 """
-版本 2021.1.1 17:00
+版本 2021.1.2 02:00
 
 这个文件用来自动发送 输出log + 性能监控log + 追加的文件 到指定邮箱列表中
 -------------------------------------------------------------------------------
@@ -65,7 +65,7 @@ import psutil
 import threading
 
 
-def start_monitor(log_dir, log_name='server_status.log', report_time=300, sample_time=3):
+def start_monitor(log_dir, log_name='server_status.log', report_time=300, sample_time=5):
     """
     启动函数
     :param log_dir:
@@ -88,7 +88,7 @@ def stop_monitor(monitor_process):
     monitor_process.join()
 
 
-def server_monitor_process(log_dir, log_name='server_status.log', report_time=300, sample_time=3):
+def server_monitor_process(log_dir, log_name='server_status.log', report_time=300, sample_time=5):
     """
     主函数
     :param log_dir: 日志保存目录
@@ -185,7 +185,7 @@ def save_server_log(cpu_usage, mem_usage, log_dir, log_name):
         f.close()
 
 
-def write_information_to_log(log_dir, log_name, info_type, report_time=0, sample_time=0,
+def write_information_to_log(log_dir, log_name, info_type, report_time=60, sample_time=5,
                              cpu_avg='', mem_avg='', cpu_max='', mem_max=''):
     """
     在日志的前后部写入统计信息
@@ -206,7 +206,7 @@ def write_information_to_log(log_dir, log_name, info_type, report_time=0, sample
                            '监控开始时间:    %s\n' \
                            '采样间隔:  %s  | 计算均值写入日志间隔:   %s  \n' \
                            '============================================\n' % \
-                           (current_time, str(report_time), str(sample_time))
+                           (current_time, str(sample_time), str(report_time))
     elif info_type == 'finish':
         status_statement = '============================================\n' \
                            '监控结束时间:    %s\n' \
@@ -320,8 +320,8 @@ finish_process = 0
 # 定义监控参数
 server_log_dir = place_to_save_log  # 服务器server_log路径
 server_log_name = 'server_status.log'  # 服务器server_log名字
-report_time = 5  # 每次计算均值写入日志的间隔时间 300s
-sample_time = 1  # 每次监控采样的间隔时间 5s
+report_time = 300  # 每次计算均值写入日志的间隔时间 300s
+sample_time = 5  # 每次监控采样的间隔时间 5s
 
 # 开始监控
 monitor_process, server_log_name = start_monitor(server_log_dir, server_log_name, report_time, sample_time)
@@ -403,8 +403,12 @@ def send_log(mail_list=defaut_receivers, log_cache_name=log_cache_name, log_moni
 
     # 处理文本
     mail_content = log_monitor.text_content
-    for i in mail_content:
-        message.attach(MIMEText(i, 'plain', 'utf-8'))
+    if len(mail_content) > 0:
+        text_item = 'Note:\n'
+        for i in mail_content:
+            text_item += str(i)
+            text_item += '\n'
+        message.attach(MIMEText(text_item, 'plain', 'utf-8'))
 
     # 处理追加附件
     additional_file_list = log_monitor.additional_file_list

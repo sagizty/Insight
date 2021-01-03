@@ -52,8 +52,27 @@ https://mp.weixin.qq.com/s/VRDCC5bfYHGbO9Qb70m95A
 2.keras中Conv， SeparableConv2D, DepthwiseConv2D三种卷积过程浅谈
 https://blog.csdn.net/shawroad88/article/details/95222082
 
-3.擦除：提升 CNN 特征可视化的 3 种重要手段
-https://mp.weixin.qq.com/s/j5P2PcFRTdhddEPUPeEraA
+Tensorflow笔记/材料
+
+0.Numpy
+https://mp.weixin.qq.com/s/tO_-YEhO8lV2La3z1qv20A
+
+
+深度学习tensorflow2入门教程
+图片分类任务
+https://tensorflow.google.cn/tutorials/images/classification#configure_the_dataset_for_performance
+
+
+注意这几个里面是倒叙排版的，就离谱
+
+1.python & tensorflow & keras 总结（一）
+https://zhuanlan.zhihu.com/p/153360838
+
+2.python & tensorflow & keras 总结（二）
+https://zhuanlan.zhihu.com/p/213949748
+
+3.python & tensorflow & keras 总结（三）
+https://zhuanlan.zhihu.com/p/260429105
 
 
 
@@ -63,11 +82,14 @@ https://mp.weixin.qq.com/s/j5P2PcFRTdhddEPUPeEraA
 1.泛化性乱弹：从随机噪声、梯度惩罚到虚拟对抗训练
 https://kexue.fm/archives/7466
 
-2.再来一顿贺岁宴：从K-Means到Capsule
-https://kexue.fm/archives/5112/comment-page-2#comments
+2.擦除：提升 CNN 特征可视化的 3 种重要手段
+https://mp.weixin.qq.com/s/j5P2PcFRTdhddEPUPeEraA
 
 3.《Attention is All You Need》浅读（简介+代码）
 https://kexue.fm/archives/4765
 
 4.突破瓶颈，打造更强大的Transformer（配合上一篇）
 https://kexue.fm/archives/7325
+
+5.再来一顿贺岁宴：从K-Means到Capsule
+https://kexue.fm/archives/5112/comment-page-2#comments

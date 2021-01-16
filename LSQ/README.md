@@ -27,10 +27,10 @@ $ python gradcam.py --sample-index 14 --batch-size 3
 
 ## Reference
 ### CNN
-https://tensorflow.google.cn/tutorials/images/cnn?hl=zh_cn
-https://github.com/KeishiIshihara/keras-gradcam-mnist
+https://tensorflow.google.cn/tutorials/images/cnn?hl=zh_cn  
+https://github.com/KeishiIshihara/keras-gradcam-mnist  
 
 ### GradCAM
-https://github.com/insikk/Grad-CAM-tensorflow
-https://github.com/jacobgil/keras-grad-cam
+https://github.com/insikk/Grad-CAM-tensorflow  
+https://github.com/jacobgil/keras-grad-cam  
 

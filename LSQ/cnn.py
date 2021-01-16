@@ -1,8 +1,10 @@
 '''
 CNN
+版本：1.16.12.30
 代码参考：
     - https://tensorflow.google.cn/tutorials/images/cnn?hl=zh_cn
     - https://github.com/KeishiIshihara/keras-gradcam-mnist
+
 模型的训练精度只有60多，但gradcam效果比较好
 '''
 import tensorflow as tf
@@ -16,7 +18,7 @@ import datetime
 # 1. 定义超参
 npy_path = 'npy_data'   # 预处理好的数据集位置
 input_shape = (100, 100, 3)     # 输入图片的大小（w, h, c）
-epochs = 4     # 训练次数
+epochs = 10     # 训练次数
 num_classes = 5     # 分类个数
 
 # 2. 读取数据
@@ -26,6 +28,10 @@ test_images = np.load(os.path.join(npy_path, 'x_test.npy'))
 test_labels = np.load(os.path.join(npy_path, 'y_test.npy'))
 train_images *= 255
 test_images *= 255
+
+# train_labels = tf.keras.utils.to_categorical(train_labels, num_classes)
+# test_labels = tf.keras.utils.to_categorical(test_labels, num_classes)
+# print(train_labels.shape)
 
 # 3. 输入模型
 model = models.Sequential()
@@ -75,4 +81,6 @@ print('Test accuracy:', test_acc)
 pathlib.Path('model').mkdir(exist_ok=True)
 model.save('model/model.hdf5')
 
-# 训练完成后可以通过在命令行中输入 tensorboard --logdir=./log 启动tensorboard，然后在 http://localhost:6006/ 查看模型信息
+# 训练完成后可以通过在命令行中输入 tensorboard --logdir=./logs 启动tensorboard，然后在 http://localhost:6006/ 查看模型信息
+
+

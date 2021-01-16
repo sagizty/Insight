@@ -39,27 +39,6 @@ model.add(layers.Dense(64, activation='relu'))
 model.add(layers.Dense(num_classes))    # 模型的最后一层要将维度降到和分类个数一致
 model.summary()     # 命令行查看模型结构
 
-# model = models.Sequential()
-# # 第一层卷积层（100->50）
-# model.add(layers.Conv2D(32, (5, 5), padding='same', input_shape=(100, 100, 3), activation='relu'))
-# model.add(layers.MaxPooling2D((2, 2), strides=2))  # 池化层图片大小缩小一半
-# # 第二个卷积层(50->25)
-# model.add(layers.Conv2D(64, (5, 5), padding='same', activation='relu'))
-# model.add(layers.MaxPooling2D((2, 2), strides=2))
-# # 第三个卷积层(25->12)
-# model.add(layers.Conv2D(128, (3, 3), padding='same', activation='relu'))
-# model.add(layers.MaxPooling2D((2, 2), strides=2))
-# # 第四个卷积层（12->6)
-# model.add(layers.Conv2D(128, (3, 3), padding='same', activation='relu'))
-# model.add(layers.MaxPooling2D((2, 2), strides=2))
-# # 全连接层
-# model.add(layers.Flatten())
-# model.add(layers.Dense(1024, activation='relu'))
-# model.add(layers.Dense(512, activation='relu'))
-# model.add(layers.Dense(5))
-#
-# model.summary()     # 查看模型结构
-
 # 4. 配置tensorboard，用于监控训练过程
 log_dir="logs/fit/" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
 tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=log_dir, histogram_freq=1)

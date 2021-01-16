@@ -1,5 +1,6 @@
 """
 GradCAM
+版本：1.16.12.30
 参考:
     - https://github.com/gorogoroyasu/mnist-Grad-CAM
     - https://github.com/insikk/Grad-CAM-tensorflow/blob/master/gradCAM_tensorflow_VGG16_demo.ipynb
@@ -135,9 +136,6 @@ def main(args):
     y_test = np.load(os.path.join(npy_path, 'y_test.npy'))
     x_test *= 255
     y_test = tf.keras.utils.to_categorical(y_test, num_classes)
-    print(x_test.shape)
-    print(y_test.shape)
-    plt.imshow(x_test[1])
 
     x = x_test[sample_index: sample_index + batch_size]
     y = y_test[sample_index: sample_index + batch_size]
@@ -171,7 +169,7 @@ def main(args):
 
     fig, ax = plt.subplots(h, w, figsize=(w*1.5, h*2))
 
-    flower_dict = {'daisy': 0, 'dandelion': 1, 'roses': 2, 'sunflowers': 3, 'tulips': 4}
+    flower_dict = {0: 'daisy', 1: 'dandelion', 2: 'roses', 3: 'sunflowers', 4: 'tulips'}
     for b in range(batch_size):
         # input image
         ax[b, 0].imshow(x[b])
@@ -198,8 +196,8 @@ def main(args):
 
 if __name__ == '__main__':
     # 定义参数
-    sample_index = 20   # 图片采样位置
-    batch_size = 2  # 采样个数
+    sample_index = 15   # 图片采样位置
+    batch_size = 3  # 采样个数
 
 
     parser = argparse.ArgumentParser(description='GradCAM flower')

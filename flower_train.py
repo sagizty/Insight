@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 """
+版本: 01.24. 22：00 加入了混淆矩阵
 参考资料：
 1。Tensorflow框架搭建卷积神经网络进行五种花的分类
 https://blog.csdn.net/AugustMe/article/details/94166164
@@ -29,6 +30,12 @@ def processing_data(all_data_path, l=224, w=224, font='/'):
     """
     # 所有图片分类目录
     data_list = [all_data_path + font + x for x in os.listdir(all_data_path) if os.path.isdir(all_data_path + font + x)]
+    label_list = [x for x in os.listdir(all_data_path) if os.path.isdir(all_data_path + font + x)]
+
+    label_dic={}
+    for i in range(len(label_list)):
+        label_dic[label_list[i]]=i
+
     imgs = []  # 定义一个imgs空列表，存放遍历读取的图片
     labels = []  # 定义一个labels空列表，存放图片标签
 
@@ -44,7 +51,7 @@ def processing_data(all_data_path, l=224, w=224, font='/'):
             imgs.append(img)  # 遍历后更改尺寸后的图片添加到imgs列表中
             labels.append(idx)  # 遍历后更改尺寸后的图片标签添加到labels列表中
 
-    return np.asarray(imgs, np.float32), np.asarray(labels, np.int32)  # np.float32是类型 后面两个变量是没有进行np.asarray
+    return np.asarray(imgs, np.float32), np.asarray(labels, np.int32),label_dic  # np.float32是类型 后面两个变量是没有进行np.asarray
 
 
 def a_img_preprocess(img_path, w=224, h=224):
@@ -227,6 +234,92 @@ def draw_training_summary(history, picpath='./training result.jpg'):
     plt.show()
 
 
+def plot_confusion_matrix(cm, target_names, normalize=True, title='Confusion matrix',
+                          picpath='./Confusion_matrix.jpg', show=False, cmap=plt.cm.Greens ):
+    """
+
+    :param cm:混淆矩阵
+    :param target_names:分类表
+    :param normalize:
+    :param title:图片内题目
+    :param picpath:画图路径
+    :param show:是否展示图片
+    :param cmap: cmap=plt.cm.Greens这个地方设置混淆矩阵的颜色主题，这个主题看着就干净~
+    :return:
+    """
+
+    accuracy = np.trace(cm) / float(np.sum(cm))
+    misclass = 1 - accuracy
+
+    if cmap is None:
+        cmap = plt.get_cmap('Blues')
+
+    plt.figure(figsize=(15, 12))
+    plt.imshow(cm, interpolation='nearest', cmap=cmap)
+    plt.title(title)
+    plt.colorbar()
+
+    if target_names is not None:
+        tick_marks = np.arange(len(target_names))
+        plt.xticks(tick_marks, target_names, rotation=45)
+        plt.yticks(tick_marks, target_names)
+
+    if normalize:
+        cm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
+
+    thresh = cm.max() / 1.5 if normalize else cm.max() / 2
+    for i, j in itertools.product(range(cm.shape[0]), range(cm.shape[1])):
+        if normalize:
+            plt.text(j, i, "{:0.4f}".format(cm[i, j]),
+                     horizontalalignment="center",
+                     color="white" if cm[i, j] > thresh else "black")
+        else:
+            plt.text(j, i, "{:,}".format(cm[i, j]),
+                     horizontalalignment="center",
+                     color="white" if cm[i, j] > thresh else "black")
+
+    plt.tight_layout()
+    plt.ylabel('True label')
+    plt.xlabel('Predicted label\naccuracy={:0.4f}; misclass={:0.4f}'.format(accuracy, misclass))
+
+    # 这里这个savefig是保存图片，如果想把图存在什么地方就改一下下面的路径，然后dpi设一下分辨率即可。
+    plt.savefig(picpath, dpi=350)
+
+    if show:
+        plt.show()
+
+
+def plot_confuse(model, test_data, test_label, label_setting, picpath='./Confusion_Matrix.jpg', show=False):
+    """
+    显示混淆矩阵
+    :param model: 训练结束之后的Keras模型
+    :param test_data:测试数据
+    :param test_label:测试标签（这里用的是One——hot向量）
+    :param label_setting:标签设置的字典
+    :return:
+    """
+    predictions = model.predict_classes(test_data, batch_size=30)
+    truelabel = test_label.argmax(axis=-1)  # 将one-hot转化为label
+    conf_mat = confusion_matrix(y_true=truelabel, y_pred=predictions)
+
+    # labels是一个列表，存储了你的各个类别的名字，最后会显示在横纵轴上。
+    labels = []
+    inverse_setting_dic = {}
+
+    for key, val in label_setting.items():
+        inverse_setting_dic[val] = key
+
+    for i in range(len(inverse_setting_dic)):
+        # 假设最多有10个类
+        if inverse_setting_dic[i] is not None:
+            labels.append(inverse_setting_dic[i])
+        else:
+            break
+
+    plot_confusion_matrix(conf_mat, target_names=labels, normalize=False, title='Confusion Matrix', picpath=picpath,
+                          show=show)
+
+
 # 模型
 def vgg_model(feature_dim_1=224, feature_dim_2=224, channel=3, target=5):
     """
@@ -286,12 +379,13 @@ def begin(project_data_path, all_data_path, model_h5name, reprocess_data=True, b
     """
     # 读取数据
     if reprocess_data:
-        data, label = processing_data(all_data_path, l, w, font=font)
+        data, label,label_dic = processing_data(all_data_path, l, w, font=font)
         np.save(project_data_path + font + "data.npy", data)
         np.save(project_data_path + font + "label.npy", label)
     else:
         data = np.load(project_data_path + font + "data.npy")
         label = np.load(project_data_path + font + "label.npy")
+        label_dic ={"tulips":0,"sunflowers":1,"roses":2,"dandelion":3,"daisy":4}
 
     # 数据增强
     data, label = enhance_data(data, label)
@@ -318,6 +412,7 @@ def begin(project_data_path, all_data_path, model_h5name, reprocess_data=True, b
 
     picpath = project_data_path + font + 'training result.jpg'
     draw_training_summary(history, picpath)
+    plot_confuse(model, x_test, y_test_hot, label_dic, picpath='./Confusion_Matrix.jpg', show=False)
 
 
 font = '/'
@@ -329,15 +424,8 @@ target = 5  # 花的种类数量
 
 # 定义训练参数
 batch_size=100
-epochs=20
+epochs=2
 '''
-# local host
-project_data_path = '/Users/zhangtianyi/Study/cam_flowers'
-all_data_path = '/Users/zhangtianyi/Study/cam_flowers/train_data'  # 所有图片的总路径(目录)
-model_h5name = 'five_flowers_categorical_vgg16.h5'
-plot_pic_path = 'training result.jpg'
-'''
-
 # remote host
 # 项目数据位置
 project_data_path = '/home/zty/Insight'
@@ -345,6 +433,28 @@ project_data_path = '/home/zty/Insight'
 all_data_path = '/home/zty/flower'
 # 训练后模型的位置
 model_h5name = 'five_flowers_categorical_vgg16.h5'
+
+
+# local host
+# 项目数据位置
+project_data_path = '/Users/zhangtianyi/Study/cam_flowers'
+# 所有图片的总路径(目录)
+all_data_path = '/Users/zhangtianyi/Study/cam_flowers/train_data'
+# 训练后模型的位置
+model_h5name = 'five_flowers_categorical_vgg16.h5'
+
+
+'''
+
+# local host
+# 项目数据位置
+project_data_path = '/Users/zhangtianyi/Study/cam_flowers'
+# 所有图片的总路径(目录)
+all_data_path = '/Users/zhangtianyi/Study/cam_flowers/train_data'
+# 训练后模型的位置
+model_h5name = 'five_flowers_categorical_vgg16.h5'
+
+
 model_path = project_data_path + font + model_h5name
 
 # 测试图像保存位置

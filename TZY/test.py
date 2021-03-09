@@ -7,7 +7,7 @@ if __name__ == "__main__":
     
     for root, dirs, files in os.walk(data_path):
         for file in files:
-            direction = os.path.append(data_path, file)
+            direction = os.path.join(data_path, file)
             f_data = np.load(direction)
             print(file)
             print(f_data.shape)

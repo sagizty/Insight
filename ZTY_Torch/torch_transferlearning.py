@@ -428,6 +428,7 @@ def modify_state_dict(pretrained_dict, model_dict, old_prefix, new_prefix):
     return state_dict
 
 
+'''
 # 假设我们希望把resnet参数导入刚刚做的newmodel里面,对应层需要修改名字
 old_prefix = ["layer1", "layer2", "layer3", "layer4"]
 new_prefix = ["0.layer1", "0.layer2", "0.layer3", "0.layer4"]
@@ -450,3 +451,296 @@ exp_lr_scheduler = lr_scheduler.StepLR(optimizer, step_size=7, gamma=0.1)
 newmodel = train_model(newmodel, criterion, optimizer, exp_lr_scheduler, num_epochs=25)
 
 visualize_model(newmodel)
+'''
+
+
+# 现在测试deep feature的思路，我们需要在fc层引入deep feature，所以fc层必须修改
+
+# 但是，因为引入deep feature涉及对数据流程的变化（deep feature需要在fc层被concat）因此需要重新写模型然后导入预训练参数
+
+
+# 调取一个预训练带参数的模型
+model_feature_ex = models.resnet50(pretrained=True)
+
+'''
+# 本段为反面教材
+
+num_ftrs = model_feature_ex.fc.in_features
+new_places = 1024
+model_feature_ex.fc = nn.Linear(num_ftrs + new_places, 1000)  # 这样是不行的，因为数据流程forward并不匹配！！！！！！！！！1
+
+# 定义另一个模型（需要追加的块）
+model2 = nn.Sequential(nn.Linear(1000, 2), nn.ReLU())  # 用sequential搭建线性模型
+
+newmodel = nn.Sequential(model_feature_ex, model2)  # 如果是线性相连，那直接用nn.Sequential就可以实现
+'''
+
+
+# 重新写模型，对原ResNet50模型进行修改
+from torch_myResNet import Bottleneck_block_constractor  # 自己的另一个文件，用来做resnet的
+
+
+# 包含deep feature 的 ResNet50 网络构建器
+class ResNet_with_deep_feature(nn.Module):
+
+    # 初始化网络结构和参数
+    def __init__(self, block_constractor, bottleneck_channels_setting, identity_layers_setting, stage_stride_setting,
+                 num_classes=None):
+        # self.inplane为当前的fm的通道数
+        self.inplane = 64
+        self.num_classes = num_classes
+
+        super(ResNet_with_deep_feature, self).__init__()  # 这个递归写法是为了拿到自己这个class里面的其他函数进来
+
+        # 关于模块结构组的构建器
+        self.block_constractor = block_constractor
+        # 每个stage中Bottleneck Block的中间维度，输入维度取决于上一层
+        self.bcs = bottleneck_channels_setting  # [64, 128, 256, 512]
+        # 每个stage的conv block后跟着的identity block个数
+        self.ils = identity_layers_setting  # [3, 4, 6, 3]
+        # 每个stage的conv block的步长设置
+        self.sss = stage_stride_setting  # [1, 2, 2, 2]
+
+        # stem的网络层
+        # 将RGB图片的通道数卷为inplane
+        self.conv1 = nn.Conv2d(3, self.inplane, kernel_size=7, stride=2, padding=3, bias=False)
+        self.bn1 = nn.BatchNorm2d(self.inplane)
+        self.relu = nn.ReLU()
+        self.maxpool = nn.MaxPool2d(kernel_size=3, padding=1, stride=2)
+
+        # 构建每个stage
+        self.layer1 = self.make_stage_layer(self.block_constractor, self.bcs[0], self.ils[0], self.sss[0])
+        self.layer2 = self.make_stage_layer(self.block_constractor, self.bcs[1], self.ils[1], self.sss[1])
+        self.layer3 = self.make_stage_layer(self.block_constractor, self.bcs[2], self.ils[2], self.sss[2])
+        self.layer4 = self.make_stage_layer(self.block_constractor, self.bcs[3], self.ils[3], self.sss[3])
+
+        # 后续的网络
+        if self.num_classes is not None:
+            self.avgpool = nn.AvgPool2d(7)
+
+            # 换掉的层，故意改个层名，免得被导入数据的时候发现格式不同报错！！！！！！！！！！！！1
+            self.fc_deep = nn.Linear(512 * self.block_constractor.extention + 1024, num_classes)
+
+    def forward(self, x, y):  # 这个时候，网络的input=【x，y】x为2d的feature，y为1024维的 机器学习 feature
+
+        # 原 x = torch.randn(1, 3, 224, 224) 现 input = 【torch.randn(1, 3, 224, 224)，torch.randn(1, 1024)】
+        # 定义构建的模型中的数据传递方法
+
+        # stem部分:conv+bn+relu+maxpool
+        out = self.conv1(x)
+        out = self.bn1(out)
+        out = self.relu(out)
+        out = self.maxpool(out)
+
+        # Resnet block实现4个stage
+        out = self.layer1(out)
+        out = self.layer2(out)
+        out = self.layer3(out)
+        out = self.layer4(out)
+
+        if self.num_classes is not None:
+            # 对接mlp来做分类
+            out = self.avgpool(out)
+            cnn_feature = torch.flatten(out, 1)
+            deep_feature = torch.flatten(y, 1)
+
+            out = torch.cat((cnn_feature, deep_feature), dim=1)
+
+            # 换掉的层，故意改个层名，免得被导入数据的时候发现格式不同报错！！！！！！！！！！！！！！！
+            out = self.fc_deep(out)
+
+        return out
+
+    def make_stage_layer(self, block_constractor, midplane, block_num, stride=1):
+        """
+        block:模块构建器
+        midplane：每个模块中间运算的维度，一般等于输出维度/4
+        block_num：重复次数
+        stride：Conv Block的步长
+        """
+
+        block_list = []
+
+        # 先计算要不要加downsample模块
+        outplane = midplane * block_constractor.extention  # extention存储在block_constractor里面
+
+        if stride != 1 or self.inplane != outplane:
+            # 若步长变了，则需要残差也重新采样。 若输入输出通道不同，残差信息也需要进行对应尺寸变化的卷积
+            downsample = nn.Sequential(
+                nn.Conv2d(self.inplane, outplane, stride=stride, kernel_size=1, bias=False),
+                nn.BatchNorm2d(midplane * block_constractor.extention)
+            )  # 注意这里不需要激活，因为我们要保留原始残差信息。后续与conv信息叠加后再激活
+        else:
+            downsample = None
+
+        # 每个stage都是1个改变采样的 Conv Block 加多个加深网络的 Identity Block 组成的
+
+        # Conv Block
+        conv_block = block_constractor(self.inplane, midplane, stride=stride, downsample=downsample)
+        block_list.append(conv_block)
+
+        # 更新网络下一步stage的输入通道要求（同时也是内部Identity Block的输入通道要求）
+        self.inplane = outplane
+
+        # Identity Block
+        for i in range(1, block_num):
+            block_list.append(block_constractor(self.inplane, midplane, stride=1, downsample=None))
+
+        return nn.Sequential(*block_list)  # pytorch对模块进行堆叠组装后返回
+
+
+# 测试
+resnetDF = ResNet_with_deep_feature(block_constractor=Bottleneck_block_constractor,
+                                    bottleneck_channels_setting=[64, 128, 256, 512],
+                                    identity_layers_setting=[3, 4, 6, 3],
+                                    stage_stride_setting=[1, 2, 2, 2],
+                                    num_classes=2)  # 迁移学习到2个类上
+
+# 不能直接改个名就完事，因为层名不同只是表面，本质上数据尺寸不同
+# newmodel = modify_model(PATH, resnetDF, old_prefix=['fc'], new_prefix=['fc_deep'])
+
+resnetDF.load_state_dict(torch.load(PATH), strict=False) # 仅fc_deep层有变化。故意改个层名，免得被导入数据的时候发现格式不同报错
+
+# 做25个数据用来测试模型是否对
+x=torch.randn(25, 3, 224, 224)
+y=torch.randn(25, 1024)
+
+t = resnetDF(x,y)
+print(t.shape)
+
+
+# 假设在训练中，我们先用noise来作为机器学习的feature，现在因为没有dataloader，因此需要改写train和val的代码，让他们自己拿noise数据
+
+def train_mode_with_deepfeaturel(model, criterion, optimizer, scheduler, num_epochs=25, device=None):
+    # scheduler is an LR scheduler object from torch.optim.lr_scheduler.
+    if device is None:
+        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
+    since = time.time()
+
+    # 用来保存最好的模型参数
+    best_model_wts = copy.deepcopy(model.state_dict())  # deepcopy 防止copy的是内存地址，这里因为目标比较大，用这个保证摘下来
+
+    # 初始化最好的表现
+    best_acc = 0.0
+    best_vac = 0.0
+    temp_acc = 0.0
+    temp_vac = 0.0
+    epoch_idx = 1
+
+    for epoch in range(num_epochs):
+        print('Epoch {}/{}'.format(epoch + 1, num_epochs))
+        print('-' * 10)
+
+        # Each epoch has a training and validation phase
+        for phase in ['train', 'val']:  # 采用这个写法来综合写train与val过程
+            if phase == 'train':
+                model.train()  # Set model to training mode
+            else:
+                model.eval()  # Set model to evaluate mode
+
+            # 记录表现
+            running_loss = 0.0
+            running_corrects = 0
+
+            # Iterate over data.
+            for inputs, labels in dataloaders[phase]:  # 不同任务段用不同dataloader的数据
+
+                noise_holder = torch.randn(inputs.shape[0], 1024).to(device)
+
+                inputs = inputs.to(device)
+                labels = labels.to(device)
+
+                # zero the parameter gradients
+                optimizer.zero_grad()
+
+                # forward
+                # track history if only in train
+                with torch.set_grad_enabled(phase == 'train'):
+                    outputs = model(inputs, noise_holder)
+                    _, preds = torch.max(outputs, 1)  # preds是最大值出现的位置，相当于是类别id
+                    loss = criterion(outputs, labels)  # loss是基于输出的vector与onehot label做loss
+
+                    # backward + optimize only if in training phase
+                    if phase == 'train':
+                        loss.backward()
+                        optimizer.step()
+
+                # 统计表现总和
+                running_loss += loss.item() * inputs.size(0)
+                running_corrects += torch.sum(preds == labels.data)
+
+            if phase == 'train':
+                scheduler.step()
+
+            # 记录输出本轮情况
+            epoch_loss = running_loss / dataset_sizes[phase]
+            epoch_acc = running_corrects.double() / dataset_sizes[phase]
+            print('{} Loss: {:.4f} Acc: {:.4f}'.format(phase, epoch_loss, epoch_acc))
+
+            if phase == 'val':
+                temp_vac = epoch_acc
+            else:
+                temp_acc = epoch_acc  # 假设这里是train的时候，记得记录
+
+            # deep copy the model，如果本epoch为止比之前都表现更好才刷新参数记录
+            # 目的是在epoch很多的时候，表现开始下降了，那么拿中间的就行
+            if phase == 'val' and better_performance(temp_acc, temp_vac, best_acc, best_vac):  # 需要定义"更好"
+                epoch_idx = epoch + 1
+                best_acc = temp_acc
+                best_vac = temp_vac
+                best_model_wts = copy.deepcopy(model.state_dict())
+
+        print()
+
+    time_elapsed = time.time() - since
+    print('Training complete in {:.0f}m {:.0f}s'.format(time_elapsed // 60, time_elapsed % 60))
+    print('Best epoch idx: ', epoch_idx)
+    print('Best epoch train Acc: {:4f}'.format(best_acc))
+    print('Best epoch val Acc: {:4f}'.format(best_vac))
+
+    # load best model weights as final model training result 这也是一种避免过拟合的方法
+    model.load_state_dict(best_model_wts)
+    return model
+
+
+def visualize_model_with_deepfeaturel(model, num_images=6):  # 预测测试
+    was_training = model.training
+    model.eval()
+    images_so_far = 0
+    fig = plt.figure()
+
+    with torch.no_grad():
+        for i, (inputs, labels) in enumerate(dataloaders['val']):
+
+            noise_holder = torch.randn(inputs.shape[0], 1024).to(device)
+            inputs = inputs.to(device)
+            labels = labels.to(device)
+
+            outputs = model(inputs, noise_holder)
+            _, preds = torch.max(outputs, 1)
+
+            for j in range(inputs.size()[0]):
+                images_so_far += 1
+                ax = plt.subplot(num_images // 2, 2, images_so_far)
+                ax.axis('off')
+                ax.set_title('predicted: {}'.format(class_names[preds[j]]))
+                imshow(inputs.cpu().data[j])
+
+                if images_so_far == num_images:
+                    model.train(mode=was_training)
+                    return
+
+        model.train(mode=was_training)
+
+criterion = nn.CrossEntropyLoss()
+
+resnetDF.to(device)
+
+optimizer = optim.SGD(filter(lambda p: p.requires_grad, newmodel.parameters()), lr=0.001, momentum=0.9)
+# Decay LR by a factor of 0.1 every 7 epochs
+exp_lr_scheduler = lr_scheduler.StepLR(optimizer, step_size=7, gamma=0.1)
+
+train_mode_with_deepfeaturel(resnetDF, criterion, optimizer, exp_lr_scheduler, num_epochs=25, device=device)
+
+visualize_model_with_deepfeaturel(resnetDF)

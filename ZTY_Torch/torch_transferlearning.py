@@ -71,10 +71,11 @@ data_transforms = {
 data_dir = './data/hymenoptera_data'
 image_datasets = {x: datasets.ImageFolder(os.path.join(data_dir, x), data_transforms[x]) for x in ['train', 'val']}
 
-dataloaders = {x: torch.utils.data.DataLoader(image_datasets[x], batch_size=4, shuffle=True, num_workers=4)
+dataloaders = {x: torch.utils.data.DataLoader(image_datasets[x], batch_size=64, shuffle=True, num_workers=4)
                for x in ['train', 'val']}
 
 dataset_sizes = {x: len(image_datasets[x]) for x in ['train', 'val']}
+
 class_names = image_datasets['train'].classes
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -119,7 +120,7 @@ def better_performance(temp_acc, temp_vac, best_acc, best_vac):
         return False
 
 
-def train_model(model, criterion, optimizer, scheduler, num_epochs=25, device=None):
+def train_model(model, dataloaders, criterion, optimizer, scheduler, num_epochs=25, device=None):
     # scheduler is an LR scheduler object from torch.optim.lr_scheduler.
     if device is None:
         device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -154,6 +155,8 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=25, device=No
             # Iterate over data.
             for inputs, labels in dataloaders[phase]:  # 不同任务段用不同dataloader的数据
                 inputs = inputs.to(device)
+                print('inputs[0]',type(inputs[0]))
+
                 labels = labels.to(device)
 
                 # zero the parameter gradients
@@ -237,6 +240,39 @@ def visualize_model(model, num_images=6):  # 预测测试
         model.train(mode=was_training)
 
 
+"""
+ResNet 迁移学习
+
+from torch_myResNet import Bottleneck_block_constractor, ResNet
+from torchvision import models
+
+# 载入预训练模型
+model = models.resnet50(pretrained=True)
+
+PATH = './saved_model_pretrained_resnet50.pth'
+
+# 保存/载入模型的参考资料 https://blog.csdn.net/strive_for_future/article/details/83240081
+# Pytorch模型迁移和迁移学习,导入部分模型参数 https://blog.csdn.net/lu_linux/article/details/113373016
+# pytorch中存储各层权重参数时的命名规则 https://blog.csdn.net/u014734886/article/details/106230535/
+
+# 保存模型
+torch.save(model.state_dict(), PATH)
+
+# 载入保存的模型，首先定义一个空模型用来接住预训练的参数，此时网络中每个层名字要和预训练的命名一致
+my_model = ResNet(block_constractor=Bottleneck_block_constractor,
+                  bottleneck_channels_setting=[64, 128, 256, 512],
+                  identity_layers_setting=[3, 4, 6, 3],
+                  stage_stride_setting=[1, 2, 2, 2],
+                  num_classes=1000)
+my_model.load_state_dict(torch.load(PATH))  # 有的时候会报错，因为层内每个位置的名字设置不一样/结构不匹配
+
+# 使用strict参数，如果为True，表明预训练模型的层和自己定义的网络结构层严格对应相等（比如层名和维度），默认 strict=True
+# my_model.load_state_dict(torch.load(PATH), strict=False)  # 这里选择为False，则不完全对等，会自动舍去多余的层和其参数。
+
+# 后续可以自己搭建其他网络，然后从这个倒入了参数的模型中拆层过去
+"""
+
+
 # 3种迁移学习的学习：
 '''
 # 完全迁移学习：整个搞过来，换层，然后训练全部参数
@@ -262,7 +298,28 @@ model_ft = train_model(model_ft, criterion, optimizer_ft, exp_lr_scheduler, num_
 # check
 visualize_model(model_ft)
 '''
+# 完全迁移学习：整个搞过来，换层，然后训练全部参数
+model_ft = models.resnet50(pretrained=True)
+num_ftrs = model_ft.fc.in_features
+# Here the size of each output sample is set to 2.
+# Alternatively, it can be generalized to nn.Linear(num_ftrs, len(class_names)).
+model_ft.fc = nn.Linear(num_ftrs, 2)
 
+model_ft = model_ft.to(device)
+
+criterion = nn.CrossEntropyLoss()
+
+# Observe that all parameters are being optimized
+optimizer_ft = optim.SGD(model_ft.parameters(), lr=0.001, momentum=0.9)
+
+# Decay LR by a factor of 0.1 every 7 epochs
+exp_lr_scheduler = lr_scheduler.StepLR(optimizer_ft, step_size=7, gamma=0.1)
+
+# train
+model_ft = train_model(model_ft, dataloaders, criterion, optimizer_ft, exp_lr_scheduler, num_epochs=25, device=device)
+
+# check
+visualize_model(model_ft)
 '''
 # 部分迁移学习：保留feature extractor
 model_feature_ex = models.resnet50(pretrained=True)
@@ -737,7 +794,10 @@ criterion = nn.CrossEntropyLoss()
 
 resnetDF.to(device)
 
+# resnetDF = nn.DataParallel(resnetDF)  # 单机多卡
+
 optimizer = optim.SGD(filter(lambda p: p.requires_grad, newmodel.parameters()), lr=0.001, momentum=0.9)
+
 # Decay LR by a factor of 0.1 every 7 epochs
 exp_lr_scheduler = lr_scheduler.StepLR(optimizer, step_size=7, gamma=0.1)
 

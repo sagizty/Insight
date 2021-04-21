@@ -57,12 +57,17 @@ def loss_batch(model, loss_func, xb, yb, opt=None):
     return loss.item(), len(xb)
 
 
-def fit(epochs, model, loss_func, opt, train_dl, valid_dl):
+def fit(epochs, model, loss_func, opt, train_dl, valid_dl, dev=None):
+    if dev is None:
+        dev = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+
     for epoch in range(epochs):
 
         # 迭代训练
         model.train()
         for xb, yb in train_dl:
+            xb.to(dev)
+            yb.to(dev)
             loss_batch(model, loss_func, xb, yb, opt)
 
         # 验证
@@ -164,7 +169,7 @@ model = Mnist_CNN().to(dev)
 opt = optim.SGD(model.parameters(), lr=lr, momentum=0.9)  # Momentum is a variation on stochastic gradient descent
 # that takes previous updates into account as well and generally leads to faster training.
 
-fit(epochs, model, loss_func, opt, train_dl, valid_dl)
+fit(epochs, model, loss_func, opt, train_dl, valid_dl, dev)
 print("\n\n\n\n\n\n\n")
 '''
 # 冻结某一层而其他不变
@@ -194,7 +199,7 @@ new_model.conv1.weight.requires_grad = False
 new_model.to(dev)
 
 optimizer = optim.SGD(filter(lambda p: p.requires_grad, new_model.parameters()), lr=lr, momentum=0.9)
-fit(epochs, new_model, loss_func, optimizer, train_dl, valid_dl)
+fit(epochs, new_model, loss_func, optimizer, train_dl, valid_dl, dev)
 
 print("unfreze")
 # 解冻
@@ -205,4 +210,4 @@ optimizer = optim.SGD(filter(lambda p: p.requires_grad, new_model.parameters()),
 new_model.to(dev)
 new_model = nn.DataParallel(new_model)  # 单机多卡
 
-fit(epochs, new_model, loss_func, optimizer, train_dl, valid_dl)
+fit(epochs, new_model, loss_func, optimizer, train_dl, valid_dl, dev)

@@ -136,7 +136,7 @@ loss.backward() adds the gradients to whatever is already stored, rather than re
 
 # Training loop use SGD
 
-from IPython.core.debugger import set_trace
+#from IPython.core.debugger import set_trace  # 打断点的一种方法
 
 lr = 0.5  # learning rate
 epochs = 2  # how many epochs to train for

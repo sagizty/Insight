@@ -1,14 +1,17 @@
 """
-版本 4月21日 实现分类任务的迁移学习
+版本 4月23日 实现分类任务的迁移学习
 
 Backbone：Resnet50
 
-构建dataloader
-训练框架
+主要任务：
+1构建imagefolder dataloader
+2搭建训练框架
+3配置tensorboard画图
+4画grad cam
 
-配置tensorboard画图
+任务目标：
+测试迁移学习的效果
 
-画grad cam
 
 
 Pytorch迁移学习的资料
@@ -72,6 +75,8 @@ import shutil
 from tensorboardX import SummaryWriter
 from PIL import Image
 
+from torch_7_grad_CAM import get_last_conv_name, GradCAM, gen_cam
+
 
 def del_file(filepath):
     """
@@ -86,6 +91,7 @@ def del_file(filepath):
             os.remove(file_path)
         elif os.path.isdir(file_path):
             shutil.rmtree(file_path)
+
 
 # 数据设置
 '''
@@ -159,6 +165,7 @@ def imshow(inp, title=None):  # 与data_transforms对应
         plt.title(title)
     plt.pause(0.001)  # pause a bit so that plots are updated
 
+
 # 测试一波数据
 '''
 # Get a batch of training data
@@ -172,6 +179,12 @@ imshow(out, title=[class_names[x] for x in classes])
 # Scheduling the learning rate
 # Saving the best model
 '''
+
+
+# Grad CAM部分
+
+
+# 训练部分
 
 def better_performance(temp_acc, temp_vac, best_acc, best_vac):  # 迭代过程中选用更好的结果
 
@@ -258,7 +271,7 @@ def train_model(model, dataloaders, criterion, optimizer, scheduler, class_names
                                       float(loss.item()),
                                       epoch * len(dataloaders[phase]) + index)
                     writer.add_scalar(phase + ' ACC',
-                                      float(torch.sum(preds == labels.data)/inputs.size(0)),
+                                      float(torch.sum(preds == labels.data) / inputs.size(0)),
                                       epoch * len(dataloaders[phase]) + index)
 
                 # 画图检测效果
@@ -271,9 +284,13 @@ def train_model(model, dataloaders, criterion, optimizer, scheduler, class_names
 
                     print('loss:', float(log_running_loss) / check_num)
 
-                    visualize_model(model, dataloaders, class_names, num_images=9, device=device,
-                                    pic_name='E_' + str(epoch_idx) + '_I_' + str(index + 1), draw_path=draw_path,
-                                    writer=writer)
+                    check_grad_CAM(model_ft, dataloaders, class_names, num_images=2, device=device,
+                                   pic_name='GradCAM_E_' + str(epoch_idx) + '_I_' + str(index + 1),
+                                   draw_path=draw_path, writer=writer)
+
+                    visualize_check(model, dataloaders, class_names, num_images=9, device=device,
+                                    pic_name='Visual_E_' + str(epoch_idx) + '_I_' + str(index + 1),
+                                    draw_path=draw_path, writer=writer)
 
                     model_time = time.time()
                     log_running_loss = 0.0
@@ -318,8 +335,22 @@ def train_model(model, dataloaders, criterion, optimizer, scheduler, class_names
     return model
 
 
-def visualize_model(model, dataloaders, class_names, num_images=9, device='cpu', pic_name='test',
+def visualize_check(model, dataloaders, class_names, num_images=9, device='cpu', pic_name='test',
                     draw_path='/home/ZTY/imaging_results', writer=None):  # 预测测试
+    '''
+    对num_images个图片进行检查，每行放3个图
+
+    :param model:输入模型
+    :param dataloaders:输入数据dataloader，本文件中是train和val的2个dataloader一起作为一个组输入
+    :param class_names:分类的类别名字
+    :param num_images:需要检验的原图数量
+    :param device:cpu/gpu
+    :param pic_name:输出图片的名字
+    :param draw_path:输出图片的文件夹
+    :param writer:输出图片上传到tensorboard服务器
+
+    :return:
+    '''
     was_training = model.training
     model.eval()
 
@@ -328,6 +359,7 @@ def visualize_model(model, dataloaders, class_names, num_images=9, device='cpu',
 
     with torch.no_grad():
         for i, (inputs, labels) in enumerate(dataloaders['val']):
+
             inputs = inputs.to(device)
             labels = labels.to(device)
 
@@ -364,30 +396,102 @@ def visualize_model(model, dataloaders, class_names, num_images=9, device='cpu',
         model.train(mode=was_training)
 
 
-if __name__ == '__main__':
-    import notify
-    notify.add_text('进行resnet50迁移学习，2分类，过程上传到tensorboard')
-    notify.send_log()
+def check_grad_CAM(model, dataloaders, class_names, num_images=3, device='cpu', pic_name='test',
+                   draw_path='/home/ZTY/imaging_results', writer=None):
+    '''
+    检查num_images个图片在每个类别上的cam，每行有每个类别的图，行数=num_images，为检查的图片数量
 
+    :param model:输入模型
+    :param dataloaders:输入数据dataloader，本文件中是train和val的2个dataloader一起作为一个组输入
+    :param class_names:分类的类别名字
+    :param num_images:需要检验的原图数量
+    :param device:cpu/gpu
+    :param pic_name:输出图片的名字
+    :param draw_path:输出图片的文件夹
+    :param writer:输出图片上传到tensorboard服务器
+
+    :return:
+    '''
+    # Get a batch of training data
+    inputs, classes = next(iter(dataloaders['val']))
+
+    # 预测测试
+    was_training = model.training
+    model.eval()
+
+    inputs = inputs.to(device)
+    labels = classes.to(device)
+
+    outputs = model(inputs)
+    _, preds = torch.max(outputs, 1)
+
+    # 先确定最后一个卷积层名字
+    layer_name = get_last_conv_name(model)
+    grad_cam = GradCAM(model, layer_name)  # 生成grad cam调取器，包括注册hook等
+
+    images_so_far = 0
+    plt.figure()
+
+    for j in range(inputs.size()[0]):
+
+        for cls_idx in range(len(class_names)):
+            images_so_far += 1
+            ax = plt.subplot(num_images, len(class_names), images_so_far)
+            ax.axis('off')
+            ax.set_title('True {} Pred {} CAM on {}'.format(class_names[int(labels[j])], class_names[preds[j]],
+                                                            class_names[cls_idx]))
+            # 基于输入数据 和希望检查的类id，建立对应的cam mask
+            mask = grad_cam(inputs[j], cls_idx)
+            # 调取原图
+            check_image = inputs.cpu().data[j].numpy().transpose((1, 2, 0))
+            # 转为叠加图cam，与热力图heatmap保存
+            cam, heatmap = gen_cam(check_image, mask)
+
+            plt.imshow(cam)
+            plt.pause(0.001)  # pause a bit so that plots are updated
+
+            if images_so_far == num_images * len(class_names):
+                picpath = draw_path + '/' + pic_name + '.jpg'
+                if not os.path.exists(draw_path):
+                    os.makedirs(draw_path)
+
+                plt.show()
+                plt.savefig(picpath, dpi=1000)
+
+                grad_cam.remove_handlers()  # 删除注册的hook
+                model.train(mode=was_training)
+
+                if writer is not None:  # 用这个方式读取保存的图片到tensorboard上面
+                    image_PIL = Image.open(picpath)
+                    img = np.array(image_PIL)
+                    writer.add_image(pic_name, img, 1, dataformats='HWC')
+
+                return
+
+    grad_cam.remove_handlers()  # 删除注册的hook
+    model.train(mode=was_training)
+
+
+if __name__ == '__main__':
     num_classes = 2
 
-    draw_path = '/home/ZTY/runs/lung_cls'+str(num_classes)+'_resnet50'
+    import notify
+    notify.add_text('进行resnet50迁移学习 ' + str(num_classes) + '分类，过程上传到tensorboard')
+    notify.send_log()
 
+    draw_path = '/home/ZTY/runs/lung_cls' + str(num_classes) + '_resnet50'
     model_path = '/home/ZTY/saved_models'
-    model_path = model_path + '/Resnet50_cam_detction_cls'+str(num_classes)+'_e45.pth'
-
-    dataroot = '/home/NSCLC-project/Datasets/2D_local_dataset_cls'+str(num_classes)+'_Ori_spacing'
-
-
+    model_path = model_path + '/Resnet50_cam_detction_cls' + str(num_classes) + '_e45.pth'
+    dataroot = '/home/NSCLC-project/Datasets/2D_local_dataset_cls' + str(num_classes) + '_Ori_spacing'
 
     if os.path.exists(draw_path):
         del_file(draw_path)  # 每次开始的时候都先清空一次
+    else:
+        os.makedirs(draw_path)
     # 在命令行同文件夹跑tensorboard --logdir=/home/ZTY/runs --host=10.201.10.16 --port=7777
 
     # 调取tensorboard服务器
     writer = SummaryWriter(draw_path)
-
-
 
     data_transforms = {
         'train': transforms.Compose([
@@ -409,14 +513,10 @@ if __name__ == '__main__':
     class_names = ['ADC', 'SCC', 'LCC', 'NOS'][0:num_classes]  # A G E B
     dataset_sizes = {x: len(lung2d_datasets[x]) for x in ['train', 'val']}  # 数据数量
 
-
-
     # 完全迁移学习：整个搞过来，换层，然后训练全部参数
     model_ft = models.resnet50(pretrained=True)  # True 是预训练好的Resnet50模型，False是随机初始化参数的模型
     num_ftrs = model_ft.fc.in_features
     model_ft.fc = nn.Linear(num_ftrs, num_classes)
-
-
 
     # Decide which device we want to run on
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")  # 这个是为了之后走双卡
@@ -425,8 +525,6 @@ if __name__ == '__main__':
         # dim = 0 [30, xxx] -> [10, ...], [10, ...], [10, ...] on 3 GPUs
         model_ft = nn.DataParallel(model_ft)
     model_ft.to(device)
-
-
 
     summary(model_ft, input_size=(3, 400, 400))  # to device 之后安排, 输出模型结构
 

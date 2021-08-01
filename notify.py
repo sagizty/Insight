@@ -700,10 +700,10 @@ log_root_path = 'log'  # 日志根目录
 max_log_cnt = 5  # 同一个程序保留的日志个数（包括当前和历史日志），过多可能会占用主存
 
 # 配置邮箱信息
-mail_host = 'smtp.exmail.qq.com'
-mail_user = 'notice@visionwyz.com'
-mail_pass = '3cvPbaNucRHvNiJb'  # 腾讯企业邮箱的授权码
-default_receivers = ('foe3305@163.com', '476017732@qq.com', '2212903239@qq.com')
+mail_host = 'smtp.163.com'
+mail_user = 'tum9598@163.com'
+mail_pass = 'EXVGQACCXPUIUQAE'  # 腾讯企业邮箱的授权码
+default_receivers = 'foe3305@163.com'
 
 # 启动notify后台进程
 notify_frontend = NotifyFrontend(log_root_path=log_root_path, mail_host=mail_host,

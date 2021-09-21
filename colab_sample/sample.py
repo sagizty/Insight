@@ -16,11 +16,11 @@ data_root = os.path.join('/data', 'Insight', 'sample_data')  # 数据例子文�
 Path = os.path.join('/home/Insight/code', 'colab_sample')  # 例子项目例子文件夹colab_sample
 
 # 用于记录tensorboard等等输出的文件夹'/data' + '项目名称' + 'runs'
-runs_path='/home/Insight/runs'
+runs_path = '/home/Insight/runs'
 runs_fangdiandongxi_path = os.path.join(runs_path, 'colab_sample_runs_output')  # 例子项目例子文件夹colab_sample
 
 # 用于记录tensorboard等等输出的文件夹'/data' + '项目名称' + 'saved_models'
-savemodel_path='/home/Insight/saved_models'
+savemodel_path = '/home/Insight/saved_models'
 savemodel_fangdiandongxi_path = os.path.join(savemodel_path, 'colab_sample_model_output')  # 例子项目例子文件夹colab_sample
 
 # sample代码段

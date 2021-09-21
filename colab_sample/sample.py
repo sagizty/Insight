@@ -9,12 +9,12 @@ import os
 print('hello world')
 
 # 注意文件路径
-# 数据路径（在另一个盘data盘）'/data/zhanglab_headneck' + '项目名称'
-data_root = os.path.join('/data/zhanglab_headneck', 'sample_data')  # 数据例子文件夹
-# 你的代码+材料文件路径 '/home/zhanglab_headneck/code/' + '你的文件夹' # 注意需要在系统切换路径
-Path = os.path.join('/home/zhanglab_headneck/code', 'colab_sample')
+# 数据路径（在另一个盘data盘）'/data' + '项目名称'
+data_root = os.path.join('/data','Insight', 'sample_data')  # 数据例子文件夹
+# 你的代码+材料文件路径 '/home/项目名称/code/' + '你的文件夹' # 注意需要在系统切换路径
+Path = os.path.join('/home/Insight/code', 'colab_sample')
 # 用于记录tensorboard等等输出的文件夹
-runs_path = os.path.join('/home/zhanglab_headneck/runs', 'colab_sample')
+runs_path = os.path.join('/home/Insight/runs', 'colab_sample')
 
 # sample代码段
 print('working path:', Path)

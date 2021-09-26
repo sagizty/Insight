@@ -11,7 +11,18 @@
 5种花朵的AI分类器
 
 
-基础知识：教材
+基础知识：
+最最基础的入门材料这里有3个视频
+https://space.bilibili.com/88461692/channel/detail?cid=26587
+
+
+推荐几个up可以参考，做的很好
+
+https://space.bilibili.com/504715181
+
+
+
+教材
 http://zh.d2l.ai
 
 

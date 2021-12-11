@@ -16,33 +16,59 @@ MAE 简单复现  ver: 2021.12.11
 '''
 import matplotlib.pyplot as plt
 from PIL import Image
+import timm
 import torch, os
 import torch.optim as optim
 from Transformers import *
+from tensorboardX import SummaryWriter
 
 
 class MAE(nn.Module):
     def __init__(self, encoder, decoder_dim, mask_ratio=0.75, decoder_depth=1,
                  num_decoder_heads=8, decoder_dim_per_head=64):
+        """
+        MAE 框架，自带decoder模块
+
+        :param encoder: 输入Transformer模型
+
+        :param decoder_dim: Encoder 输出的维度可能和 Decoder 要求的输入维度不一致
+        :param mask_ratio: paper提倡这个比例最好是 75%
+
+        :param decoder_depth: 实质就是多层堆叠的 Transformer（这个也有一个gap问题，前后结构是否一样值得研究） TODO
+        :param num_decoder_heads:
+        :param decoder_dim_per_head:
+        """
         super().__init__()
         assert 0. < mask_ratio < 1., f'mask ratio must be kept between 0 and 1, got: {mask_ratio}'
 
         # Encoder(这里 CW 用 ViT 实现)
         self.encoder = encoder
-        self.patch_h, self.patch_w = encoder.patch_h, encoder.patch_w
+        self.patch_h = encoder.patch_embed.patch_size[0]
+        self.patch_w = encoder.patch_embed.patch_size[1]
+
+        encoder_dim = encoder.embed_dim
+
+        channels = 3
+        patch_dim = channels * self.patch_h * self.patch_w
 
         # 由于原生的 ViT 有 cls_token，因此其 position embedding 的倒数第2个维度是：
         # 实际划分的 patch 数量加上 1个 cls_token
-        num_patches_plus_cls_token, encoder_dim = encoder.pos_embed.shape[-2:]
+        # num_patches_plus_cls_token, encoder_dim = encoder.pos_embed.shape[-2:]  fixme 之前不匹配
+        num_patches_plus_cls_token = encoder.patch_embed.num_patches + 1
+
+        # Patch embedding 后续考虑做成使用encoder的，但是原文使用的是MLP映射而不是CNN映射
+        self.patch_embed = nn.Linear(patch_dim, encoder_dim)
+
         # Input channels of encoder patch embedding: patch size**2 x 3
         # 这个用作预测头部的输出通道，从而能够对 patch 中的所有像素值进行预测
-        num_pixels_per_patch = encoder.patch_embed.weight.size(1)
+        num_pixels_per_patch = encoder_dim  # encoder.patch_embed.weight.size(1)  fixme 之前不匹配
+        # print(num_pixels_per_patch)
 
         # Encoder-Decoder：Encoder 输出的维度可能和 Decoder 要求的输入维度不一致，因此需要转换
         self.enc_to_dec = nn.Linear(encoder_dim, decoder_dim) if encoder_dim != decoder_dim else nn.Identity()
 
         # Mask token
-        # 社会提倡这个比例最好是 75%
+        # paper提倡这个比例最好是 75%
         self.mask_ratio = mask_ratio
         # mask token 的实质：1个可学习的共享向量
         self.mask_embed = nn.Parameter(torch.randn(decoder_dim))
@@ -92,18 +118,21 @@ class MAE(nn.Module):
 
         # 对应 batch 维度的索引：(b,1)
         batch_ind = torch.arange(b, device=device).unsqueeze(-1)
-        # 利用先前生成的索引对 patches 进行采样，分为 mask 和 unmasked 两组
+        # 利用先前生成的索引对 patches 进行采样，分为 mask 和 unmasked 两组 TODO
         mask_patches, unmask_patches = patches[batch_ind, mask_ind], patches[batch_ind, unmask_ind]
 
         '''iii. Encode'''
 
         # 将 patches 通过 emebdding 转换成 tokens
-        unmask_tokens = self.encoder.patch_embed(unmask_patches)
+        unmask_tokens = self.patch_embed(unmask_patches)
+        # unmask_tokens = self.encoder.patch_embed(unmask_patches)  fixme 之前不匹配
+
         # 为 tokens 加入 position embeddings
         # 注意这里索引加1是因为索引0对应 ViT 的 cls_token
         unmask_tokens += self.encoder.pos_embed.repeat(b, 1, 1)[batch_ind, unmask_ind + 1]
         # 真正的编码过程
-        encoded_tokens = self.encoder.transformer(unmask_tokens)
+        encoded_tokens = self.encoder.blocks(unmask_tokens)
+        # encoded_tokens = self.encoder.transformer(unmask_tokens)  fixme 之前不匹配
 
         '''iv. Decode'''
 
@@ -165,11 +194,13 @@ class MAE(nn.Module):
 
         '''iii. Encode'''
 
-        unmask_tokens = self.encoder.patch_embed(unmask_patches)
+        # unmask_tokens = self.encoder.patch_embed(unmask_patches)  fixme 之前不匹配
+        unmask_tokens = self.patch_embed(unmask_patches)
+
         # Add position embeddings
         unmask_tokens += self.encoder.pos_embed.repeat(b, 1, 1)[batch_ind, unmask_ind + 1]
-        encoded_tokens = self.encoder.transformer(unmask_tokens)
-
+        # encoded_tokens = self.encoder.transformer(unmask_tokens)  fixme 之前不匹配
+        encoded_tokens = self.encoder.blocks(unmask_tokens)
         '''iv. Decode'''
 
         enc_to_dec_tokens = self.enc_to_dec(encoded_tokens)
@@ -225,9 +256,42 @@ class MAE(nn.Module):
         return recons_img, patches_to_img
 
 
+def train(mae, dataloader, optimizer, criterion, epoch=1000, writer=None):
+
+    for i in range(epoch):
+        img_ts=dataloader  # TODO 这个只是假的dataloader
+        pred_mask_pixel_values, mask_patches = mae(img_ts)
+        optimizer.zero_grad()
+        loss = criterion(pred_mask_pixel_values, mask_patches)
+
+        loss.backward()
+        optimizer.step()
+        # 比较下预测值和真实值
+        mse_per_patch = (pred_mask_pixel_values - mask_patches).abs().mean(dim=-1)
+        mse_all_patches = mse_per_patch.mean()
+        print(f'Epoch: {i+1} ')
+        print(f'mse all (masked)patches: {mse_all_patches} ')
+        print(f'all close: {torch.allclose(pred_mask_pixel_values, mask_patches, rtol=1e-1, atol=1e-1)}')
+
+        if writer is not None:
+            # ...log the running loss
+            writer.add_scalar('train' + ' minibatch loss',
+                              float(mse_all_patches),
+                              i)
+    # 结束记录内容给tensorboard
+    if writer is not None:
+        writer.close()
+
+
 def main():
     BASE_DIR = r'./'
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+    draw_path = os.path.join(BASE_DIR, 'sample_run_MAE')
+    if not os.path.exists(draw_path):
+        os.makedirs(draw_path)
+
+    writer = SummaryWriter(draw_path)
 
     # 读入图像并缩放到适合模型输入的尺寸
     img_raw = Image.open(os.path.join(BASE_DIR, 'mountain.jpg'))
@@ -248,7 +312,8 @@ def main():
     print(f"input tensor shape: {img_ts.shape} dtype: {img_ts.dtype} device: {img_ts.device}")
 
     # 实例化模型
-    encoder = ViT(img_size, patch_size, dim=512, mlp_dim=1024, dim_per_head=64)
+    # encoder = ViT(img_size, patch_size, dim=512, mlp_dim=1024, dim_per_head=64)
+    encoder = timm.create_model('vit_base_patch16_224', pretrained=True, num_classes=1000)
     decoder_dim = 512
     mae = MAE(encoder, decoder_dim, decoder_depth=6)
     # weight = torch.load(os.path.join(BASE_DIR, 'mae.pth'), map_location='cpu')  # 加载训练好的权重
@@ -258,18 +323,7 @@ def main():
     criterion = nn.MSELoss()
     optimizer = optim.Adam(mae.parameters(), lr=0.0001, weight_decay=0.01)
 
-    for i in range(1000):
-        pred_mask_pixel_values, mask_patches = mae(img_ts)
-        optimizer.zero_grad()
-        loss = criterion(pred_mask_pixel_values, mask_patches)
-        loss.backward()
-        optimizer.step()
-        # 比较下预测值和真实值
-        mse_per_patch = (pred_mask_pixel_values - mask_patches).abs().mean(dim=-1)
-        mse_all_patches = mse_per_patch.mean()
-        print(f'mse all (masked)patches: {mse_all_patches} ')
-        print(f'all close: {torch.allclose(pred_mask_pixel_values, mask_patches, rtol=1e-1, atol=1e-1)}')
-        print(i)
+    train(mae, img_ts, optimizer, criterion, epoch=1000, writer=writer)  # TODO 这个用的假dataloader
 
     # 推理
     # 模型重建的效果图，mask 效果图

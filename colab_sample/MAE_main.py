@@ -294,7 +294,7 @@ def main():
     writer = SummaryWriter(draw_path)
 
     # 读入图像并缩放到适合模型输入的尺寸
-    img_raw = Image.open(os.path.join(BASE_DIR, 'mountain.jpg'))
+    img_raw = Image.open(os.path.join(BASE_DIR, 'photo.jpg'))
     h, w = img_raw.height, img_raw.width
     ratio = h / w
     print(f"image hxw: {h} x {w} mode: {img_raw.mode}")
@@ -303,7 +303,7 @@ def main():
     img = img_raw.resize(img_size)
     rh, rw = img.height, img.width
     print(f'resized image hxw: {rh} x {rw} mode: {img.mode}')
-    img.save(os.path.join(BASE_DIR, 'resized_mountain.jpg'))
+    img.save(os.path.join(BASE_DIR, 'resized_photo.jpg'))
 
     # 将图像转换成张量
     from torchvision.transforms import ToTensor, ToPILImage
@@ -332,31 +332,31 @@ def main():
 
     # 将结果保存下来以便和原图比较
     recons_img = ToPILImage()(recons_img_ts)
-    recons_img.save(os.path.join(BASE_DIR, 'recons_mountain.jpg'))
+    recons_img.save(os.path.join(BASE_DIR, 'reconstucted_photo.jpg'))
 
     masked_img = ToPILImage()(masked_img_ts)
-    masked_img.save(os.path.join(BASE_DIR, 'masked_mountain.jpg'))
+    masked_img.save(os.path.join(BASE_DIR, 'masked_photo.jpg'))
 
     # 画图
-    img = Image.open(os.path.join(BASE_DIR, 'mountain.jpg'))
-    plt.figure("mountain")  # 图像窗口名称
+    img = Image.open(os.path.join(BASE_DIR, 'photo.jpg'))
+    plt.figure("photo")  # 图像窗口名称
     plt.imshow(img)
     plt.axis('off')  # 关掉坐标轴为 off
-    plt.title('mountain')  # 图像题目
+    plt.title('photo')  # 图像题目
     plt.show()
 
-    img = Image.open(os.path.join(BASE_DIR, 'masked_mountain.jpg'))
-    plt.figure("masked_mountain")  # 图像窗口名称
+    img = Image.open(os.path.join(BASE_DIR, 'masked_photo.jpg'))
+    plt.figure("masked_photo")  # 图像窗口名称
     plt.imshow(img)
     plt.axis('off')  # 关掉坐标轴为 off
-    plt.title('masked_mountain')  # 图像题目
+    plt.title('masked_photo')  # 图像题目
     plt.show()
 
-    img = Image.open(os.path.join(BASE_DIR, 'recons_mountain.jpg'))
-    plt.figure("recons_mountain")  # 图像窗口名称
+    img = Image.open(os.path.join(BASE_DIR, 'reconstucted_photo.jpg'))
+    plt.figure("reconstucted_photo")  # 图像窗口名称
     plt.imshow(img)
     plt.axis('off')  # 关掉坐标轴为 off
-    plt.title('recons_mountain')  # 图像题目
+    plt.title('reconstucted_photo')  # 图像题目
     plt.show()
 
 

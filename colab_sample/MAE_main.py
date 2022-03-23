@@ -1,26 +1,23 @@
-'''
-MAE 简单复现  ver: 2021.12.11
-
+"""
+MAE 简单复现  ver: 2021.3.23
 本实验是单个图片的MAE复现，意在说明MAE的过程。
 本身没有进行代码结构性与逻辑细节的优化。
-
 这个里面用的vit和我们习惯的timm版本略有不同，后续需要做匹配
 总的来说，这个脚本作为一个流程例子用来学习MAE流程和部分细节还是不错的，
 但是需要匹配性的重新做才可以使用到论文中。
-
 这个脚本离真正论文能用的还有很远距离。
-
 来自：https://zhuanlan.zhihu.com/p/439554945
-
 我加了一些内容和注释
-'''
+"""
+import os
+
 import matplotlib.pyplot as plt
-from PIL import Image
 import timm
-import torch, os
 import torch.optim as optim
-from Transformers import *
+from PIL import Image
 from tensorboardX import SummaryWriter
+
+from Transformers import *
 
 
 class MAE(nn.Module):
@@ -28,12 +25,9 @@ class MAE(nn.Module):
                  num_decoder_heads=8, decoder_dim_per_head=64):
         """
         MAE 框架，自带decoder模块
-
         :param encoder: 输入Transformer模型
-
         :param decoder_dim: Encoder 输出的维度可能和 Decoder 要求的输入维度不一致
         :param mask_ratio: paper提倡这个比例最好是 75%
-
         :param decoder_depth: 实质就是多层堆叠的 Transformer（这个也有一个gap问题，前后结构是否一样值得研究） TODO
         :param num_decoder_heads:
         :param decoder_dim_per_head:
@@ -186,6 +180,7 @@ class MAE(nn.Module):
         # Shuffle
         # (b, n_patches)
         shuffle_indices = torch.rand(b, num_patches, device=device).argsort()
+        # .argsort()返回能使得数据有序的索引。比如argsort([2,1])，结果是[1,0],即：最小的元素是索引为0的元素，其次是1.
         mask_ind, unmask_ind = shuffle_indices[:, :num_masked], shuffle_indices[:, num_masked:]
 
         # (b, 1)
@@ -257,9 +252,8 @@ class MAE(nn.Module):
 
 
 def train(mae, dataloader, optimizer, criterion, epoch=1000, writer=None):
-
     for i in range(epoch):
-        img_ts=dataloader  # TODO 这个只是假的dataloader
+        img_ts = dataloader  # TODO 这个只是假的dataloader
         pred_mask_pixel_values, mask_patches = mae(img_ts)
         optimizer.zero_grad()
         loss = criterion(pred_mask_pixel_values, mask_patches)
@@ -269,7 +263,7 @@ def train(mae, dataloader, optimizer, criterion, epoch=1000, writer=None):
         # 比较下预测值和真实值
         mse_per_patch = (pred_mask_pixel_values - mask_patches).abs().mean(dim=-1)
         mse_all_patches = mse_per_patch.mean()
-        print(f'Epoch: {i+1} ')
+        print(f'Epoch: {i + 1} ')
         print(f'mse all (masked)patches: {mse_all_patches} ')
         print(f'all close: {torch.allclose(pred_mask_pixel_values, mask_patches, rtol=1e-1, atol=1e-1)}')
 
@@ -287,14 +281,14 @@ def main():
     BASE_DIR = r'./'
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    draw_path = os.path.join(BASE_DIR, 'sample_run_MAE')
+    draw_path = os.path.join(BASE_DIR, 'runs')
     if not os.path.exists(draw_path):
         os.makedirs(draw_path)
 
     writer = SummaryWriter(draw_path)
 
     # 读入图像并缩放到适合模型输入的尺寸
-    img_raw = Image.open(os.path.join(BASE_DIR, 'photo.jpg'))
+    img_raw = Image.open(os.path.join(BASE_DIR, 'BUAA.jpg'))
     h, w = img_raw.height, img_raw.width
     ratio = h / w
     print(f"image hxw: {h} x {w} mode: {img_raw.mode}")
@@ -303,7 +297,7 @@ def main():
     img = img_raw.resize(img_size)
     rh, rw = img.height, img.width
     print(f'resized image hxw: {rh} x {rw} mode: {img.mode}')
-    img.save(os.path.join(BASE_DIR, 'resized_photo.jpg'))
+    img.save(os.path.join(BASE_DIR, 'resized_BUAA.jpg'))
 
     # 将图像转换成张量
     from torchvision.transforms import ToTensor, ToPILImage
@@ -332,31 +326,31 @@ def main():
 
     # 将结果保存下来以便和原图比较
     recons_img = ToPILImage()(recons_img_ts)
-    recons_img.save(os.path.join(BASE_DIR, 'reconstucted_photo.jpg'))
+    recons_img.save(os.path.join(BASE_DIR, 'recons_BUAA.jpg'))
 
     masked_img = ToPILImage()(masked_img_ts)
-    masked_img.save(os.path.join(BASE_DIR, 'masked_photo.jpg'))
+    masked_img.save(os.path.join(BASE_DIR, 'masked_BUAA.jpg'))
 
     # 画图
-    img = Image.open(os.path.join(BASE_DIR, 'photo.jpg'))
-    plt.figure("photo")  # 图像窗口名称
+    img = Image.open(os.path.join(BASE_DIR, 'BUAA.jpg'))
+    plt.figure("BUAA")  # 图像窗口名称
     plt.imshow(img)
     plt.axis('off')  # 关掉坐标轴为 off
-    plt.title('photo')  # 图像题目
+    plt.title('BUAA')  # 图像题目
     plt.show()
 
-    img = Image.open(os.path.join(BASE_DIR, 'masked_photo.jpg'))
-    plt.figure("masked_photo")  # 图像窗口名称
+    img = Image.open(os.path.join(BASE_DIR, 'masked_BUAA.jpg'))
+    plt.figure("masked_BUAA")  # 图像窗口名称
     plt.imshow(img)
     plt.axis('off')  # 关掉坐标轴为 off
-    plt.title('masked_photo')  # 图像题目
+    plt.title('masked_BUAA')  # 图像题目
     plt.show()
 
-    img = Image.open(os.path.join(BASE_DIR, 'reconstucted_photo.jpg'))
-    plt.figure("reconstucted_photo")  # 图像窗口名称
+    img = Image.open(os.path.join(BASE_DIR, 'recons_BUAA.jpg'))
+    plt.figure("recons_BUAA")  # 图像窗口名称
     plt.imshow(img)
     plt.axis('off')  # 关掉坐标轴为 off
-    plt.title('reconstucted_photo')  # 图像题目
+    plt.title('recons_BUAA')  # 图像题目
     plt.show()
 
 

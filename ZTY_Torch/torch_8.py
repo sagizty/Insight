@@ -15,17 +15,38 @@ def draw(train_res, val_res):
     plt.show()
 
 
-def get_data(size=100, dim=10):
+def get_data(size=1000, dim=10, batch_size=8):
+    # dataset
     dataset = torch.normal(mean=0, std=1, size=(size,))
 
-    Y = []
     X = []
+    Y = []
     for i in range(size):
         index = torch.randint(dataset.shape[0], size=(dim,))
-        Y.append(dataset[index].mean())
-        X.append(dataset[index])
 
-    return X, Y
+        x = dataset[index]
+        y = x.mean().unsqueeze(0)
+
+        X.append(x.unsqueeze(0))
+        Y.append(y.unsqueeze(0))
+
+    # dataloader
+    Batch_X = []
+    Batch_Y = []
+
+    batch_num = size // batch_size
+
+    for batch in range(batch_num):
+        x_batch = X[batch * batch_size:(batch + 1) * batch_size]
+        y_batch = Y[batch * batch_size:(batch + 1) * batch_size]
+        x = torch.stack(x_batch).squeeze()
+        y = torch.stack(y_batch).squeeze()
+        if len(y.shape) < len(x.shape):
+            y = y.unsqueeze(-1)
+        Batch_X.append(x)
+        Batch_Y.append(y)
+
+    return Batch_X, Batch_Y
 
 
 # with nn.linear
@@ -84,7 +105,7 @@ def train(model, X_train, Y_train, X_test, Y_test, critation, optimizer, epochs=
             pred = model(input)
 
             loss = critation(pred, label)
-            accum_loss += loss
+            accum_loss += loss.item()
 
             # print(input.grad)
             # print(pred.grad)
@@ -99,7 +120,7 @@ def train(model, X_train, Y_train, X_test, Y_test, critation, optimizer, epochs=
             # print(input.grad)
             # print(pred.grad)
 
-        Train_loss_rec.append(accum_loss.item() / len(X_train))
+        Train_loss_rec.append(accum_loss / len(X_train))
 
         # val
         accum_loss = 0
@@ -107,33 +128,33 @@ def train(model, X_train, Y_train, X_test, Y_test, critation, optimizer, epochs=
             input, label = Variable(X_test[i]), Variable(Y_test[i])
             pred = model(input)
             loss = critation(pred, label)
-            accum_loss += loss
-        Val_loss_rec.append(accum_loss.item() / len(X_test))
+            accum_loss += loss.item()
+        Val_loss_rec.append(accum_loss / len(X_test))
 
     return model, Train_loss_rec, Val_loss_rec
 
 
-X, Y = get_data()
+if __name__ == '__main__':
+    X, Y = get_data()
 
-X_train, X_test, Y_train, Y_test = train_test_split(X, Y, test_size=0.2, random_state=42)
+    X_train, X_test, Y_train, Y_test = train_test_split(X, Y, test_size=0.2, random_state=42)
 
-MLP = MLP_model(in_features=10, hidden_features=24, out_features=1, depth=2, act_layer=nn.ReLU)
+    MLP = MLP_model(in_features=10, hidden_features=24, out_features=1, depth=2, act_layer=nn.ReLU)
 
-# track and print the grad (forward and backward), take fc_first as the example
-# h1 = MLP.fc_first.register_forward_hook(hook_forward_function)
-# h2 = MLP.fc_first.register_backward_hook(hook_backward_function)
+    # track and print the grad (forward and backward), take fc_first as the example
+    # h1 = MLP.fc_first.register_forward_hook(hook_forward_function)
+    # h2 = MLP.fc_first.register_backward_hook(hook_backward_function)
 
-critation = nn.MSELoss()
-optimizer = torch.optim.SGD(MLP.parameters(), lr=0.01)
+    critation = nn.MSELoss()
+    optimizer = torch.optim.SGD(MLP.parameters(), lr=0.01)
 
-model, Train_loss_rec, Val_loss_rec = train(MLP, X_train, Y_train, X_test, Y_test, critation, optimizer, epochs=50)
+    model, Train_loss_rec, Val_loss_rec = train(MLP, X_train, Y_train, X_test, Y_test, critation, optimizer, epochs=50)
 
-# remove hook
-# h1.remove()
-# h2.remove()
+    # remove hook
+    # h1.remove()
+    # h2.remove()
 
-draw(Train_loss_rec, Val_loss_rec)
+    draw(Train_loss_rec, Val_loss_rec)
 
-model, Train_loss_rec, Val_loss_rec = train(model, X_train, Y_train, X_test, Y_test, critation, optimizer, epochs=5)
-# now no triggering of the hook print
-
+    # now no triggering of the hook print
+    model, Train_loss_rec, Val_loss_rec = train(model, X_train, Y_train, X_test, Y_test, critation, optimizer, epochs=5)

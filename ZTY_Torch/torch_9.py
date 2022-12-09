@@ -1,5 +1,4 @@
 import torch
-import torch.nn as nn
 from sklearn.model_selection import train_test_split
 import matplotlib.pyplot as plt
 
@@ -15,6 +14,7 @@ def draw(train_res, val_res):
 
 
 def get_data(size=1000, dim=10, batch_size=8):
+    # dataset
     dataset = torch.normal(mean=0, std=1, size=(size,))
 
     X = []
@@ -28,6 +28,7 @@ def get_data(size=1000, dim=10, batch_size=8):
         X.append(x.unsqueeze(0))
         Y.append(y.unsqueeze(0))
 
+    # dataloader
     Batch_X = []
     Batch_Y = []
 
@@ -295,25 +296,26 @@ def train(model, X_train, Y_train, X_test, Y_test, critation, epochs=20, lr=0.00
     return model, Train_loss_rec, Val_loss_rec
 
 
-X, Y = get_data(size=1000, dim=10, batch_size=8)
-X_train, X_test, Y_train, Y_test = train_test_split(X, Y, test_size=0.2, random_state=42)
+if __name__ == '__main__':
+    X, Y = get_data(size=1000, dim=10, batch_size=8)
+    X_train, X_test, Y_train, Y_test = train_test_split(X, Y, test_size=0.2, random_state=42)
 
-# netork
-model = Network()
-model.add(FCLayer(10, 24))
-model.add(ActivationLayer(ReLU, ReLU_deriv))
-model.add(FCLayer(24, 24))
-model.add(ActivationLayer(ReLU, ReLU_deriv))
-model.add(FCLayer(24, 24))
-model.add(ActivationLayer(ReLU, ReLU_deriv))
-model.add(FCLayer(24, 1))
-model.add(ActivationLayer(ReLU, ReLU_deriv))
+    # netork
+    model = Network()
+    model.add(FCLayer(10, 24))
+    model.add(ActivationLayer(ReLU, ReLU_deriv))
+    model.add(FCLayer(24, 24))
+    model.add(ActivationLayer(ReLU, ReLU_deriv))
+    model.add(FCLayer(24, 24))
+    model.add(ActivationLayer(ReLU, ReLU_deriv))
+    model.add(FCLayer(24, 1))
+    model.add(ActivationLayer(ReLU, ReLU_deriv))
 
-# loss
-critation = MSE()
+    # loss
+    critation = MSE()
 
-# train
-model, Train_loss_rec, Val_loss_rec = train(model, X_train, Y_train, X_test, Y_test, critation,
-                                            epochs=20, lr=0.0000001)
+    # train
+    model, Train_loss_rec, Val_loss_rec = train(model, X_train, Y_train, X_test, Y_test, critation,
+                                                epochs=20, lr=0.0000001)
 
-draw(Train_loss_rec, Val_loss_rec)
+    draw(Train_loss_rec, Val_loss_rec)

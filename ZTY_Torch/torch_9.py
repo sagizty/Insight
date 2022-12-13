@@ -1,3 +1,12 @@
+"""
+use torch tensor to build a CNN network
+with only tensor
+without autograd and everything
+
+co-author: chat-gpt
+
+"""
+
 import torch
 from sklearn.model_selection import train_test_split
 import matplotlib.pyplot as plt
@@ -47,191 +56,138 @@ def get_data(size=1000, dim=10, batch_size=8):
     return Batch_X, Batch_Y
 
 
-class Layer:
-    def __init__(self):
-        self.input = None
-        self.output = None
+class FC:
+    def __init__(self, input_size, output_size):
+        self.weight = torch.randn(input_size, output_size)
+        self.bias = torch.randn(output_size)
 
-    # computes the output Y of a layer for a given input X
-    def forward_propagation(self, input):
-        raise NotImplementedError
+        self.params = {"weight": self.weight, "bias": self.bias}
+        self.params_grad = {"weight": None, "bias": None}
 
-    # computes dE/dX for a given dE/dY (and update parameters if any)
-    def backward_propagation(self, output_error, learning_rate):
-        raise NotImplementedError
+    def forward(self, x):
+        self.input = x
+        return torch.matmul(self.input, self.weight) + self.bias.expand(self.input.size(0), -1)
 
-
-def ReLU(x):
-    return torch.clamp(x, min=0)
-
-
-def ReLU_deriv(Z):
-    # set > 0 to 1, rest to 0
-    return Z > 0
+    def backward(self, grad_output):
+        grad_input = torch.matmul(grad_output, self.weight.t())
+        grad_weight = torch.matmul(self.input.t(), grad_output)
+        grad_bias = grad_output.sum(0)
+        # update grad for pamrameter
+        self.params_grad = {"weight": grad_weight, "bias": grad_bias}
+        return grad_input
 
 
-class ActivationLayer(Layer):
-    def __init__(self, activation=ReLU, activation_prime=ReLU_deriv):
-        self.activation = activation
-        self.activation_prime = activation_prime
+'''
+mod = FC(10,24)
+x = torch.randn([2,10])
+err_x = torch.randn([2,24])
+y = mod.forward(x)
+mod.backward(err_x)
+mod.update(0.001)
+print(y)
+y = mod.forward(x)
+print(y)
+'''
 
-    # returns the activated input
-    def forward_propagation(self, input_data):
-        self.input = input_data  # [B,Dim]
-        x = self.activation(self.input)
-        return x
 
-    # Returns input_error=dE/dX for a given output_error=dE/dY.
-    # learning_rate is not used because there is no "learnable" parameters.
-    def backward_propagation(self, output_error, learning_rate=None):
-        # [B,Dim] -> [B,Dim]
-        return self.activation_prime(self.input) * output_error
+class ReLU:
+    def forward(self, x):
+        self.input = x
+        return torch.clamp(self.input, min=0)
+
+    def backward(self, grad_output):
+        return grad_output * (self.input > 0)
 
 
 '''
 x = torch.randn([2,10])
 err_x=torch.randn([2,10])
-ac=ActivationLayer()
-y=ac.forward_propagation(x)
+ac=ReLU()
+y=ac.forward(x)
 print(y)
-z=ac.backward_propagation(err_x)
+z=ac.backward(err_x)
 print(z)
 '''
 
 
-class FCLayer(Layer):
-    # input_size = number of input neurons
-    # output_size = number of output neurons
-    def __init__(self, input_size, output_size):
-        self.input_size = input_size  # Dim
-        self.output_size = output_size  # out_Dim
-
-        self.weights = torch.normal(mean=0, std=1, size=(input_size, output_size))
-        self.bias = torch.normal(mean=0, std=1, size=(1, output_size))
-
-    # returns output for a given input
-    def forward_propagation(self, input_data):
-        B, dim = input_data.shape
-        self.input = input_data
-        # [B,Dim] (*[Dim,out_Dim]) -> [B,out_Dim] (+[B,out_Dim]) -> [B,out_Dim]
-        x = torch.mm(self.input, self.weights) + self.bias.expand(B, -1)
-        return x
-
-    # computes dE/dW, dE/dB for a given output_error=dE/dY. Returns input_error=dE/dX.
-    def backward_propagation(self, output_error, learning_rate):
-        B, out_Dim = output_error.shape
-        # [B,out_Dim] -> [B,Dim] for previous block
-        back_error = torch.mm(output_error, self.weights.T)
-        # [B,Dim] -> [Dim,B] * [B,out_Dim] -> [Dim,out_Dim]
-        weights_error = torch.mm(self.input.T, output_error)
-        # [B,out_Dim] -> [out_Dim] -> [1,out_Dim]
-        dBias = torch.sum(output_error, 0).unsqueeze(0)
-
-        # update parameters
-        self.weights -= learning_rate * weights_error
-        self.bias -= learning_rate * dBias
-        return back_error
-
-
-'''
-# test forward and backward
-
-mod = FCLayer(10,24)
-x = torch.randn([2,10])
-err_x = torch.randn([2,24])
-y = mod.forward_propagation(x)
-mod.backward_propagation(err_x,0.001)
-print(y)
-y = mod.forward_propagation(x)
-print(y)
-'''
-
-
-# loss function and its derivative
-def mse(target, pred):
-    # MSE loss
-    loss = (pred - target) ** 2
-    loss = loss.mean(dim=-1).unsqueeze(-1)
-
-    return loss
-
-
-def mse_deriv(target, pred):
-    de_loss = 2 * (pred - target)
-    de_loss = de_loss.mean(dim=-1).unsqueeze(-1)
-    return de_loss
-
-
-class loss:
+class MSELoss:
     def __init__(self):
-        self.target = None
-        self.pred = None
+        pass
 
-    # computes the output Y of a layer for a given input X
-    def forward_measure(self, target, pred):
-        raise NotImplementedError
-
-    # computes dE/dX for a given dE/dY (and update parameters if any)
-    def backward_measure(self):
-        raise NotImplementedError
-
-
-class MSE(loss):
-    def __init__(self, loss_measure=mse, loss_prime=mse_deriv):
-        self.loss_measure = loss_measure
-        self.loss_prime = loss_prime
-
-    # returns the activated input
-    def forward_measure(self, target, pred):
-        loss = self.loss_measure(target, pred)
+    def forward(self, input, target):
+        # Calculate the mean squared error between the input and target tensors
+        self.input = input  # Save the input tensor for use in the backward pass
         self.target = target
-        self.pred = pred
-        return loss
+        return ((self.input - self.target) ** 2).mean(dim=-1).unsqueeze(-1)
 
-    # Returns de_loss=dE/dX for a given output_error=dE/dY.
-    def backward_measure(self):
-        de_loss = self.loss_prime(self.target, self.pred)
-        return de_loss
+    def backward(self):
+        # Calculate the gradient of the loss with respect to the input tensor
+        return ((self.input - self.target) * 2).mean(dim=-1).unsqueeze(-1)
 
 
 '''
-X, Y = get_data()
-critation = MSE()
-loss = critation.forward_measure(Y[0], pred)
-print(loss.sum(),loss.shape)
-de_loss = critation.backward_measure()
-print(de_loss.shape)
+pred = torch.randn([2, 10])
+target = torch.randn([2, 10])
+critation = MSELoss()
+loss = critation.forward(pred, target)
+print(loss.sum(), loss.shape)
+erro_dev = critation.backward()
+print(erro_dev.shape)
 '''
 
 
 class Network:
     def __init__(self):
         self.layers = []
-        self.loss = None
-        self.loss_prime = None
 
     # add layer to network
     def add(self, layer):
         self.layers.append(layer)
-
-    # set loss to use
-    def use(self, loss, loss_prime):
-        self.loss = loss
-        self.loss_prime = loss_prime
 
     # predict output for given input
     def forward(self, x):
         # forward a batch
 
         for layer in self.layers:
-            x = layer.forward_propagation(x)
+            x = layer.forward(x)
 
         return x
 
-    def backward(self, de_loss, learning_rate=0.0001):
+    def backward(self, erro_dev):
 
         for layer in reversed(self.layers):
-            de_loss = layer.backward_propagation(de_loss, learning_rate)
+            erro_dev = layer.backward(erro_dev)
+
+
+# Define the SGD optimizer class
+class SGD:
+    def __init__(self, model, lr):
+        # Save the list of parameters and the learning rate as attributes of the SGD instance
+        self.layers = []
+        for depth_idx, layer in enumerate(model.layers):
+            try:
+                layer_params = layer.params  # params.dict
+                layer_params_grad = layer.params_grad
+            except:
+                pass  # no parames
+            else:
+                self.layers.append(depth_idx)
+
+        self.lr = lr
+
+        self.model = model
+
+    def step(self):
+        # Iterate over the list of parameters
+        for depth_idx in self.layers:
+            param = self.model.layers[depth_idx].params
+            # Update the parameter tensor by subtracting the product of the learning rate
+            # and the gradient of the loss with respect to the parameter tensor from the parameter tensor
+            for param_key in param:
+                param[param_key] -= self.lr * self.model.layers[depth_idx].params_grad[param_key]
+
+                # clean grad
+                self.model.layers[depth_idx].params_grad[param_key] = None
 
 
 '''
@@ -240,28 +196,33 @@ X_train, X_test, Y_train, Y_test = train_test_split(X, Y, test_size=0.2, random_
 
 # netork
 net = Network()
-net.add(FCLayer(10, 24))
-net.add(ActivationLayer(ReLU, ReLU_deriv))
-net.add(FCLayer(24, 24))
-net.add(ActivationLayer(ReLU, ReLU_deriv))
-net.add(FCLayer(24, 1))
-net.add(ActivationLayer(ReLU, ReLU_deriv))
+net.add(FC(10, 24))
+net.add(ReLU())
+net.add(FC(24, 24))
+net.add(ReLU())
+net.add(FC(24, 24))
+net.add(ReLU())
+net.add(FC(24, 1))
+net.add(ReLU())
 
+optimizer = SGD(net, lr=0.0001)
 pred = net.forward(X_train[0])
-critation = MSE()
-loss = critation.forward_measure(Y_train[0], pred)
+
+critation = MSELoss()
+loss = critation.forward(pred, Y_train[0])
 print(loss.sum())
-de_loss = critation.backward_measure()
+erro_dev = critation.backward()
 
-net.backward(de_loss, learning_rate=0.0001)
+net.backward(erro_dev)
+optimizer.step()
 
 pred = net.forward(X_train[0])
-loss = mse(Y_train[0], pred)
+loss = critation.forward(pred, Y_train[0])
 print(loss.sum())
 '''
 
 
-def train(model, X_train, Y_train, X_test, Y_test, critation, epochs=20, lr=0.00001):
+def train(model, X_train, Y_train, X_test, Y_test, critation, optimizer, epochs=20):
     Train_loss_rec = []
     Val_loss_rec = []
 
@@ -274,13 +235,14 @@ def train(model, X_train, Y_train, X_test, Y_test, critation, epochs=20, lr=0.00
             # forward
             pred = model.forward(input)
 
-            loss = critation.forward_measure(label, pred)
+            loss = critation.forward(pred,label)
             accum_loss += loss.sum()
 
             # back propergation
-            de_loss = critation.backward_measure()
+            de_loss = critation.backward()
+            model.backward(de_loss)
 
-            model.backward(de_loss, learning_rate=lr)
+            optimizer.step()
 
         Train_loss_rec.append(float((accum_loss / len(X_train))))
 
@@ -289,7 +251,7 @@ def train(model, X_train, Y_train, X_test, Y_test, critation, epochs=20, lr=0.00
         for i in range(len(X_test)):
             input, label = X_test[i], Y_test[i]
             pred = model.forward(input)
-            loss = critation.forward_measure(label, pred)
+            loss = critation.forward(label, pred)
             accum_loss += loss.sum()
         Val_loss_rec.append(float((accum_loss / len(X_test))))
 
@@ -302,20 +264,22 @@ if __name__ == '__main__':
 
     # netork
     model = Network()
-    model.add(FCLayer(10, 24))
-    model.add(ActivationLayer(ReLU, ReLU_deriv))
-    model.add(FCLayer(24, 24))
-    model.add(ActivationLayer(ReLU, ReLU_deriv))
-    model.add(FCLayer(24, 24))
-    model.add(ActivationLayer(ReLU, ReLU_deriv))
-    model.add(FCLayer(24, 1))
-    model.add(ActivationLayer(ReLU, ReLU_deriv))
+    model.add(FC(10, 24))
+    model.add(ReLU())
+    model.add(FC(24, 24))
+    model.add(ReLU())
+    model.add(FC(24, 24))
+    model.add(ReLU())
+    model.add(FC(24, 1))
+    model.add(ReLU())
 
     # loss
-    critation = MSE()
+    critation = MSELoss()
+
+    optimizer = SGD(model, lr=0.00001)
 
     # train
-    model, Train_loss_rec, Val_loss_rec = train(model, X_train, Y_train, X_test, Y_test, critation,
-                                                epochs=20, lr=0.0000001)
+    model, Train_loss_rec, Val_loss_rec = train(model, X_train, Y_train, X_test, Y_test, critation, optimizer,
+                                                epochs=20)
 
     draw(Train_loss_rec, Val_loss_rec)

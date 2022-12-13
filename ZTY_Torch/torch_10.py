@@ -546,7 +546,7 @@ def train(model, train_loader, test_loader, critation, optimizer, epochs=20, fla
         # val
         accum_loss = 0.0
         for input_batch_img, batch_label in test_loader:
-            input, label = minist_preprocess(input_batch_img, batch_label)
+            input, label = minist_preprocess(input_batch_img, batch_label, flattern=flattern)
             pred = model.forward(input)
             loss = critation.forward(label, pred)
             accum_loss += loss.sum()

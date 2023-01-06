@@ -3,8 +3,6 @@ use torch tensor to build a CNN network
 with only tensor
 without autograd and everything
 
-co-author: chat-gpt
-
 """
 
 import torch

@@ -1,7 +1,7 @@
 """
 Version: Jan 7 2023
 
-use torch tensor to build a CNN network 
+use torch tensor to build a CNN network
 with only tensor
 without autograd and everything
 
@@ -82,7 +82,6 @@ print(z.shape)
 """
 
 
-# todo pooling
 class MaxPool:
     def __init__(self, kernel_size, stride=None, padding=0):
         self.kernel_size = kernel_size
@@ -124,6 +123,88 @@ class MaxPool:
 
 '''
 pooling = MaxPool(kernel_size=3, stride=1, padding=0)
+x = torch.randn([2, 3, 30, 30])
+y = pooling.forward(x)
+print(y.shape)
+err_x = torch.randn([2, 3, 28, 28])
+y = pooling.backward(err_x)
+print(y.shape)
+'''
+
+class AvgPool:
+    def __init__(self, kernel_size, stride=None, padding=0):
+        self.kernel_size = kernel_size
+        self.stride = stride or kernel_size
+        self.padding = padding
+
+    def forward(self, x):
+        self.input = x
+        # Calculate the size of the output tensor
+        batch_size, channels, in_height, in_width = self.input.size()
+        out_height = (in_height + 2 * self.padding - self.kernel_size) // self.stride + 1
+        out_width = (in_width + 2 * self.padding - self.kernel_size) // self.stride + 1
+
+        # Create an output tensor filled with zeros
+        output = torch.zeros(batch_size, channels, out_height, out_width, dtype=self.input.dtype,
+                             device=self.input.device)
+
+        # Zero-pad the input tensor if necessary
+        if self.padding > 0:
+            self.input = torch.nn.functional.pad(self.input, (self.padding, self.padding, self.padding, self.padding))
+            # Create a padded tensor filled with zeros
+            padded = torch.zeros(batch_size, channels, in_height + 2 * padding, in_width + 2 * padding,
+                                 dtype=self.input.dtype, device=self.input.device)
+            # Copy the input tensor to the center of the padded tensor
+            padded[:, :, padding:padding + height, padding:padding + width] = self.input
+        else:
+            padded = self.input
+
+        # Loop over the batch and channels dimensions
+        for b in range(batch_size):
+            for c in range(channels):
+                # Loop over the output height and width dimensions
+                for i in range(out_height):
+                    for j in range(out_width):
+                        # Calculate the start and end indices of the current kernel
+                        h_start = i * self.stride
+                        h_end = h_start + self.kernel_size
+                        w_start = j * self.stride
+                        w_end = w_start + self.kernel_size
+
+                        # Average the values in the current kernel and store them in the output tensor
+                        output[b, c, i, j] = torch.mean(padded[b, c, h_start:h_end, w_start:w_end])
+
+        return output
+
+    def backward(self, grad_output):
+        # Calculate the size of the input tensor
+        batch_size, channels, in_height, in_width = self.input.size()
+        out_height, out_width = grad_output.size()[-2:]
+
+        # Create a gradient tensor filled with zeros
+        grad_input = torch.zeros_like(self.input)
+
+        # Loop over the batch and channels dimensions
+        for b in range(batch_size):
+            for c in range(channels):
+                # Loop over the output height and width dimensions
+                for i in range(out_height):
+                    for j in range(out_width):
+                        # Calculate the start and end indices of the current kernel
+                        h_start = i * self.stride
+                        h_end = h_start + self.kernel_size
+                        w_start = j * self.stride
+                        w_end = w_start + self.kernel_size
+
+                        # Average the gradient values in the current kernel and store them in the gradient tensor
+                        grad_input[b, c, h_start:h_end, w_start:w_end] = grad_output[b, c, i, j] / (
+                                    self.kernel_size * self.kernel_size)
+
+        return grad_input
+
+
+'''
+pooling = AvgPool(kernel_size=3, stride=1, padding=0)
 x = torch.randn([2, 3, 30, 30])
 y = pooling.forward(x)
 print(y.shape)

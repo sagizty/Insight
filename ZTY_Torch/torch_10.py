@@ -1,10 +1,11 @@
 """
-use torch tensor to build a CNN network
+Version: Jan 7 2023
+
+use torch tensor to build a CNN network 
 with only tensor
 without autograd and everything
 
 author Tianyi Zhang
-co-author: chat-gpt
 
 """
 
@@ -21,42 +22,8 @@ def draw(train_res, val_res):
     plt.ylabel('loss (MSE)')
     plt.xlabel('epoch')
     plt.legend(loc='best')
-    plt.title('MLP fitting curve')
+    plt.title('CNN fitting curve')
     plt.show()
-
-
-def get_data(size=1000, dim=10, batch_size=8):
-    # dataset
-    dataset = torch.normal(mean=0, std=1, size=(size,))
-
-    X = []
-    Y = []
-    for i in range(size):
-        index = torch.randint(dataset.shape[0], size=(dim,))
-
-        x = dataset[index]
-        y = x.mean().unsqueeze(0)
-
-        X.append(x.unsqueeze(0))
-        Y.append(y.unsqueeze(0))
-
-    # dataloader
-    Batch_X = []
-    Batch_Y = []
-
-    batch_num = size // batch_size
-
-    for batch in range(batch_num):
-        x_batch = X[batch * batch_size:(batch + 1) * batch_size]
-        y_batch = Y[batch * batch_size:(batch + 1) * batch_size]
-        x = torch.stack(x_batch).squeeze()
-        y = torch.stack(y_batch).squeeze()
-        if len(y.shape) < len(x.shape):
-            y = y.unsqueeze(-1)
-        Batch_X.append(x)
-        Batch_Y.append(y)
-
-    return Batch_X, Batch_Y
 
 
 def minist_preprocess(input_batch_img, batch_label, num_classes=10, flattern=True):
@@ -122,9 +89,10 @@ class MaxPool:
         self.stride = stride or kernel_size
         self.padding = padding
 
-    def forward(self, inputs):
-        self.input_shape = inputs.shape
-        batch_size, channels, height, width = inputs.shape
+    def forward(self, x):
+        self.input = x
+
+        batch_size, channels, height, width = self.input.shape
         outputs = torch.zeros(batch_size, channels,
                               (height + 2 * self.padding - self.kernel_size) // self.stride + 1,
                               (width + 2 * self.padding - self.kernel_size) // self.stride + 1)
@@ -134,24 +102,35 @@ class MaxPool:
                 for h in range(0, height + 2 * self.padding - self.kernel_size + 1, self.stride):
                     for w in range(0, width + 2 * self.padding - self.kernel_size + 1, self.stride):
                         outputs[b, c, h // self.stride, w // self.stride] = \
-                            inputs[b, c, h:h+self.kernel_size, w:w+self.kernel_size].max()
+                            self.input[b, c, h:h+self.kernel_size, w:w+self.kernel_size].max()
 
         return outputs
 
     def backward(self, grad_output):
-        grad_input = torch.zeros(self.input_shape)
+        grad_input = torch.zeros(self.input.shape)
 
-        batch_size, channels, height, width = self.input_shape
+        batch_size, channels, height, width = self.input.shape
         for b in range(batch_size):
             for c in range(channels):
                 for h in range(0, height + 2 * self.padding - self.kernel_size + 1, self.stride):
                     for w in range(0, width + 2 * self.padding - self.kernel_size + 1, self.stride):
-                        window = inputs[b, c, h:h+self.kernel_size, w:w+self.kernel_size]
+                        window = self.input[b, c, h:h+self.kernel_size, w:w+self.kernel_size]
                         max_index = window.argmax()
                         grad_input[b, c, h + max_index // self.kernel_size, w + max_index % self.kernel_size] \
                             = grad_output[b, c, h // self.stride, w // self.stride]
 
         return grad_input
+
+
+'''
+pooling = MaxPool(kernel_size=3, stride=1, padding=0)
+x = torch.randn([2, 3, 30, 30])
+y = pooling.forward(x)
+print(y.shape)
+err_x = torch.randn([2, 3, 28, 28])
+y = pooling.backward(err_x)
+print(y.shape)
+'''
 
 
 class FC:
@@ -180,11 +159,11 @@ class FC:
 mod = FC(10,24)
 x = torch.randn([2,10])
 err_x = torch.randn([2,24])
+
 y = mod.forward(x)
-mod.backward(err_x)
-mod.update(0.001)
 print(y)
-y = mod.forward(x)
+
+y = mod.backward(err_x)
 print(y)
 '''
 

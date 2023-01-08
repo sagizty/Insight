@@ -1,5 +1,5 @@
 """
-Version: Jan 7 2023
+Version: Jan 8 2023
 
 use torch tensor to build a CNN network
 with only tensor
@@ -80,6 +80,40 @@ print(z.shape)
 z= a.backward(y)
 print(z.shape)
 """
+
+
+class Flatten:
+    def __init__(self):
+        super(Flatten, self).__init__()
+
+    def forward(self, x):
+        # Calculate the size of the input tensor
+        self.size = x.size()
+
+        # Flatten the tensor
+        flattened_x = x.view(self.size[0], -1)
+
+        return flattened_x
+
+    def backward(self, grad_output):
+        # Reshape the gradient tensor to have the same shape as the original input tensor
+        grad_input = grad_output.view(self.size)
+
+        return grad_input
+
+
+'''
+# Example usage
+flatten = Flatten()
+x = torch.randn(2, 3, 4, 5, 6)
+y = flatten.forward(x)
+print(y.size())  # Output: torch.Size([2, 60])
+
+# Calculate the gradient of y with respect to x
+grad_y = torch.randn(2, 360)
+grad_x = flatten.backward(grad_y)
+print(grad_x.size())
+'''
 
 
 class MaxPool:
@@ -266,6 +300,35 @@ y=ac.forward(x)
 print(y)
 z=ac.backward(err_x)
 print(z)
+'''
+
+
+class Sigmoid:
+    def __init__(self):
+        super(Sigmoid, self).__init__()
+
+    def forward(self, x):
+        # Apply the sigmoid function
+        self.output = 1 / (1 + (-x).exp())
+
+        return self.output
+
+    def backward(self, grad_output):
+        # Calculate the gradient of the sigmoid function
+        grad_input = self.output * (1 - self.output) * grad_output
+
+        return grad_input
+
+'''
+# Example usage
+model_me = Sigmoid()
+x = torch.randn(2, 3, 4)
+y = model_me.forward(x)
+print(y.size())  # Output: torch.Size([2, 60])
+
+# Calculate the gradient of y with respect to x
+grad_x = model_me.backward(y)
+print(grad_x.size())
 '''
 
 

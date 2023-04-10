@@ -167,6 +167,8 @@ def reverse_diffusion(model, DS, timesteps=1000, img_shape=(3, 64, 64), num_imag
                       save_path=None, generate_video=True):
     # Assign a batch of X(T) (Noise ~ N(0,1)) to x_t (t = T)
     x_T = torch.randn((num_images, *img_shape), device=device)  # [num_images, C, H, W]
+    x_t = x_T  # the first X_t
+
     model.eval()
 
     if generate_video:  # build the results into frames of a video
@@ -179,8 +181,7 @@ def reverse_diffusion(model, DS, timesteps=1000, img_shape=(3, 64, 64), num_imag
         # Assign a batch of timesteps (value all at t) to each X(t): [B]
         timesteps_batch = torch.ones(num_images, dtype=torch.long, device=device) * time_step
 
-        x_t = Denoising_onestep(model, DS, x_T, timesteps_batch, start_at_T=True) if time_step == 1 \
-            else Denoising_onestep(model, DS, x_t, timesteps_batch, start_at_T=False)
+        x_t = Denoising_onestep(model, DS, x_t, timesteps_batch, start_at_T=True if time_step == 1 else False)
 
         # put the intermediate results into a frame
         if generate_video:

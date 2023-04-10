@@ -66,4 +66,4 @@ model.load_state_dict(torch.load(os.path.join(checkpoint_dir, "ddpm.tar"), map_l
 model.to(BaseConfig.DEVICE)
 
 inference(model, sd, img_shape=TrainingConfig.IMG_SHAPE, num_images=64, timesteps=1000, nrow=8,
-          log_dir="inference_results", generate_video=generate_video, device=BaseConfig.DEVICE)
+          log_dir=log_dir, generate_video=generate_video, device=BaseConfig.DEVICE)

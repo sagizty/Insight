@@ -13,7 +13,7 @@ import torch
 from torch.utils.data import DataLoader
 
 import torchvision
-import torchvision.transforms as TF
+import torchvision.transforms as transform
 import torchvision.datasets as datasets
 from IPython.display import display, HTML
 
@@ -122,9 +122,15 @@ def get(element: torch.Tensor, idxs: torch.Tensor):
     return ele.reshape(-1, 1, 1, 1)  # size: B,1,1,1
 
 
-def frames2vid(images, save_path):
-    WIDTH = images[0].shape[1]
-    HEIGHT = images[0].shape[0]
+def frames2vid_for_cv2frames(frames_list, save_path):
+    """
+    Convert a list of numpy image frames into a mp4 video
+    :param frames_list:
+    :param save_path:
+    :return:
+    """
+    WIDTH = frames_list[0].shape[1]
+    HEIGHT = frames_list[0].shape[0]
 
     #     fourcc = cv2.VideoWriter_fourcc(*'XVID')
     #     fourcc = 0
@@ -132,7 +138,7 @@ def frames2vid(images, save_path):
     video = cv2.VideoWriter(save_path, fourcc, 25, (WIDTH, HEIGHT))
 
     # Appending the images to the video one by one
-    for image in images:
+    for image in frames_list:
         video.write(image)
 
     # Deallocating memories taken for window creation
@@ -147,14 +153,14 @@ def display_gif(gif_path):
 
 
 def get_dataset(dataset_name='MNIST'):
-    transforms = TF.Compose(
+    transforms = transform.Compose(
         [
-            TF.ToTensor(),
-            TF.Resize((32, 32),
-                      interpolation=TF.InterpolationMode.BICUBIC,
-                      antialias=True),
+            transform.ToTensor(),
+            transform.Resize((32, 32),
+                             interpolation=transform.InterpolationMode.BICUBIC,
+                             antialias=True),
             #             TF.RandomHorizontalFlip(),
-            TF.Lambda(lambda t: (t * 2) - 1)  # Scale between [-1, 1]
+            transform.Lambda(lambda t: (t * 2) - 1)  # Scale between [-1, 1]
         ]
     )
 
@@ -181,3 +187,34 @@ def get_dataloader(dataset_name='MNIST', batch_size=32, pin_memory=False, shuffl
 def inverse_transform(tensors):
     """Convert tensors from [-1., 1.] to [0., 255.]"""
     return ((tensors.clamp(-1, 1) + 1.0) / 2.0) * 255.0
+
+
+def make_a_grid_based_cv2_npy(tensor_img_batch: torch.Tensor, nrow:int):
+    # the generated tensor_img_batch is B,C,H,W and C is RGB format (PIL), values in 0-1 range
+    x_inv = inverse_transform(tensor_img_batch).type(torch.uint8)  # move image to 0-255 scale [B,C,H,W],RGB:0-255
+
+    # place imgs into grid [C,H',W'],RGB:0-255
+    grid = torchvision.utils.make_grid(x_inv, nrow=nrow, pad_value=255.0).to("cpu")
+
+    # make the grid img to a frame format (cv2 image: HWC,BGR:0-255)
+    # [C,H',W'],RGB:0-255 -> [H',W',C],RGB:0-255 -> npy -> [H',W',C_reverse],BGR:0-255,npy
+    grid_cv2_npy = torch.permute(grid, (1, 2, 0)).numpy()[:, :, ::-1]
+
+    return grid_cv2_npy
+
+
+def cv2_to_pil(cv2_npy_img):
+    # [H,W,C_reverse],BGR:0-255  -> [H,W,C],RGB:0-255 -> Image.fromarray -> [C,H,W],RGB:0-1
+    pil_image = Image.fromarray(cv2_npy_img[:, :, ::-1])
+    return pil_image
+
+
+def make_a_grid_based_PIL_npy(tensor_img_batch: torch.Tensor, nrow:int):
+    # the generated tensor_img_batch is B,C,H,W and C is RGB format (PIL), values in 0-1 range
+    tensor_img_batch = inverse_transform(tensor_img_batch).type(torch.uint8)  # move image to 0-255 scale
+    # place imgs into grid [C,H',W']
+    grid = torchvision.utils.make_grid(tensor_img_batch, nrow=nrow, pad_value=255.0).to("cpu")
+    # make the [C,H,W],RGB:0-255 tensor figure to a PIL npy image[C,H,W],RGB:0-1
+    pil_image = transform.functional.to_pil_image(grid)
+
+    return pil_image

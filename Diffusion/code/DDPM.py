@@ -10,11 +10,9 @@ from PIL import Image
 from tqdm import tqdm
 import torch
 from torch.cuda import amp
-import torchvision
-import torchvision.transforms as TF
 from torchmetrics import MeanMetric
 from IPython.display import display
-from tools import get, inverse_transform, frames2vid
+from tools import get, make_a_grid_based_cv2_npy, cv2_to_pil, make_a_grid_based_PIL_npy, frames2vid_for_cv2frames
 
 
 class Diffusion_setting:
@@ -155,7 +153,7 @@ def Denoising_onestep(model, DS: Diffusion_setting, X_t: torch.Tensor, timestep:
                                             timestep)  # [B] a batch of sqrt(1-alpha_all)
 
     mean = one_by_sqrt_alpha_t * (X_t - (beta_t / sqrt_one_minus_alpha_cumulative_t) * predicted_noise)
-    var = get(DS.sqrt_beta_s, timestep)  # here, the authors take the sqrt(beta_t) from diffusing process
+    var = get(DS.sqrt_beta_s, timestep)  # todo here, the authors take the sqrt(beta_t) from diffusing process
     # instead of mathematical results of [1-alpha_cumulative(t-1)] * beta_t / [1-alpha_cumulative(t)]
 
     X_t_minus_1 = mean + var * eps
@@ -172,7 +170,7 @@ def reverse_diffusion(model, DS, timesteps=1000, img_shape=(3, 64, 64), num_imag
     model.eval()
 
     if generate_video:  # build the results into frames of a video
-        outs = []
+        frames_list = []  # all frames
 
     # step by step de-noising
     for time_step in tqdm(iterable=reversed(range(1, timesteps)), total=timesteps - 1, dynamic_ncols=False,
@@ -184,29 +182,30 @@ def reverse_diffusion(model, DS, timesteps=1000, img_shape=(3, 64, 64), num_imag
         x_t = Denoising_onestep(model, DS, x_T, timesteps_batch, start_at_T=True) if time_step == 1 \
             else Denoising_onestep(model, DS, x_t, timesteps_batch, start_at_T=False)
 
+        # put the intermediate results into a frame
         if generate_video:
-            x_inv = inverse_transform(x_t).type(torch.uint8)
-            grid = torchvision.utils.make_grid(x_inv, nrow=nrow, pad_value=255.0).to("cpu")
-            ndarr = torch.permute(grid, (1, 2, 0)).numpy()[:, :, ::-1]
-            outs.append(ndarr)
+            # the generated image is C,H,W and C is RGB format (PIL), values in 0-1 range
+            grid_cv2_npy = make_a_grid_based_cv2_npy(x_t, nrow=nrow)
+            # added to all the frames
+            frames_list.append(grid_cv2_npy)
 
-    if generate_video:  # Generate and save video of the entire reverse process.
-        frames2vid(outs, save_path)
+    if generate_video:  # Generate and save video of the entire reverse process
+        frames2vid_for_cv2frames(frames_list, save_path)
         # Display the image at the final timestep of the reverse process.
-        display(Image.fromarray(outs[-1][:, :, ::-1]))
+        pil_image = cv2_to_pil(frames_list[-1])  # PIL format
+        display(pil_image)
         return None
 
     else:  # Display and save the image at the final timestep of the reverse process.
-        x_t = inverse_transform(x_t).type(torch.uint8)
-        grid = torchvision.utils.make_grid(x_t, nrow=nrow, pad_value=255.0).to("cpu")
-        pil_image = TF.functional.to_pil_image(grid)
-        pil_image.save(save_path, format=save_path[-3:].upper())
-        display(pil_image)
+        pil_image = make_a_grid_based_PIL_npy(x_t, nrow=nrow)
+        pil_image.save(save_path, format=save_path[-3:].upper())  # save PIL image
+        display(pil_image)  # show PIL image
         return None
 
 
 def train(model, sd, dataloader, optimizer, scaler, loss_fn, img_shape, total_epochs, timesteps,
           log_dir, checkpoint_dir, generate_video=False, device='cpu'):
+
     ext = ".mp4" if generate_video else ".png"
 
     for epoch in range(1, total_epochs + 1):
@@ -238,8 +237,10 @@ def train(model, sd, dataloader, optimizer, scaler, loss_fn, img_shape, total_ep
 
 def inference(model, sd, img_shape, num_images=64, timesteps=1000, nrow=8,
               log_dir="inference_results", generate_video=False, device='cpu'):
+
     os.makedirs(log_dir, exist_ok=True)
     ext = ".mp4" if generate_video else ".png"
+
     filename = f"{datetime.now().strftime('%Y%m%d-%H%M%S')}{ext}"
 
     save_path = os.path.join(log_dir, filename)
@@ -255,5 +256,5 @@ def inference(model, sd, img_shape, num_images=64, timesteps=1000, nrow=8,
         device=device,
         nrow=nrow,
     )
-    print(save_path)
+    print('save_path:',save_path)
 

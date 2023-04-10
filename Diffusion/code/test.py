@@ -62,7 +62,7 @@ model = UNet(
     dropout_rate=ModelConfig.DROPOUT_RATE,
     time_multiple=ModelConfig.TIME_EMB_MULT,
 )
-model = model.load_state_dict(torch.load(os.path.join(checkpoint_dir, "ddpm.tar"))["model"], False)
+model.load_state_dict(torch.load(os.path.join(checkpoint_dir, "ddpm.tar"), map_location='cpu')["model"], False)
 model.to(BaseConfig.DEVICE)
 
 inference(model, sd, img_shape=TrainingConfig.IMG_SHAPE, num_images=64, timesteps=1000, nrow=8,

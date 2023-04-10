@@ -29,7 +29,7 @@ class BaseConfig:
 class TrainingConfig:
     TIMESTEPS = 1000  # Define number of diffusion timesteps
     IMG_SHAPE = (1, 32, 32) if BaseConfig.DATASET == "MNIST" else (3, 32, 32)
-    NUM_EPOCHS = 10
+    NUM_EPOCHS = 2500
     BATCH_SIZE = 128
     LR = 2e-4
 

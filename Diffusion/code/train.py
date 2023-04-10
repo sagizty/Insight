@@ -23,6 +23,7 @@ class BaseConfig:
     # Current log and checkpoint directory.
     # by default start from "version_0", in training, given a value to a new name folder
     log_folder = None  # in inference: specific a folder name to load, by default will be the latest version
+    checkpoint_name = "ddpm.tar"
 
 
 @dataclass
@@ -136,5 +137,6 @@ log_dir, checkpoint_dir = setup_log_directory(config=BaseConfig())
 generate_video = False
 
 train(model, sd, dataloader, optimizer, scaler, loss_fn, img_shape=TrainingConfig.IMG_SHAPE,
-      total_epochs=TrainingConfig.NUM_EPOCHS, timesteps=TrainingConfig.TIMESTEPS,
-      log_dir=log_dir, checkpoint_dir=checkpoint_dir, generate_video=generate_video, device=BaseConfig.DEVICE)
+      total_epochs=TrainingConfig.NUM_EPOCHS, timesteps=TrainingConfig.TIMESTEPS, log_dir=log_dir,
+      checkpoint_dir=checkpoint_dir, generate_video=generate_video, device=BaseConfig.DEVICE,
+      checkpoint_name=BaseConfig.checkpoint_name)

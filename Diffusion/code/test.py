@@ -23,6 +23,7 @@ class BaseConfig:
     # Current log and checkpoint directory.
     # by default start from "version_0", in training, given a value to a new name folder
     log_folder = None  # in inference: specific a folder name to load, by default will be the latest version
+    checkpoint_name = "ddpm.tar"
 
 
 @dataclass
@@ -62,7 +63,7 @@ model = UNet(
     dropout_rate=ModelConfig.DROPOUT_RATE,
     time_multiple=ModelConfig.TIME_EMB_MULT,
 )
-model.load_state_dict(torch.load(os.path.join(checkpoint_dir, "ddpm.tar"), map_location='cpu')["model"], False)
+model.load_state_dict(torch.load(os.path.join(checkpoint_dir, BaseConfig.checkpoint_name), map_location='cpu')["model"], False)
 model.to(BaseConfig.DEVICE)
 
 inference(model, sd, img_shape=TrainingConfig.IMG_SHAPE, num_images=64, timesteps=1000, nrow=8,

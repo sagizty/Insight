@@ -205,7 +205,7 @@ def reverse_diffusion(model, DS, timesteps=1000, img_shape=(3, 64, 64), num_imag
 
 
 def train(model, sd, dataloader, optimizer, scaler, loss_fn, img_shape, total_epochs, timesteps,
-          log_dir, checkpoint_dir, generate_video=False, device='cpu'):
+          log_dir, checkpoint_dir, generate_video=False, device='cpu', checkpoint_name="ddpm.tar"):
 
     ext = ".mp4" if generate_video else ".png"
 
@@ -232,7 +232,7 @@ def train(model, sd, dataloader, optimizer, scaler, loss_fn, img_shape, total_ep
                 "scaler": scaler.state_dict(),
                 "model": model.state_dict()
             }
-            torch.save(checkpoint_dict, os.path.join(checkpoint_dir, "ddpm.tar"))
+            torch.save(checkpoint_dict, os.path.join(checkpoint_dir, checkpoint_name))
             del checkpoint_dict
 
 
@@ -257,5 +257,4 @@ def inference(model, sd, img_shape, num_images=64, timesteps=1000, nrow=8,
         device=device,
         nrow=nrow,
     )
-    print('save_path:',save_path)
-
+    print('save_path:', save_path)

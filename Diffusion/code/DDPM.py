@@ -143,7 +143,7 @@ def Denoising_onestep(model, DS: Diffusion_setting, X_t: torch.Tensor, timestep:
     :return: X_t-1
     """
     # sample a batch of Noise ~ N(0,1)
-    eps = torch.randn_like(X_t) if start_at_T else torch.zeros_like(X_t)
+    eps = torch.randn_like(X_t) if not start_at_T else torch.zeros_like(X_t)
     # based on XT to guess what are 'added noise' (denoise)
     predicted_noise = model(X_t, timestep)
 

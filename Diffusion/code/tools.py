@@ -1,5 +1,5 @@
 """
-Tools Script Version Apr 10th 2023
+Tools Script Version Apr 14th 2023
 
 
 """
@@ -169,7 +169,7 @@ def get_dataset(dataset_name='MNIST'):
     elif dataset_name == "Cifar-10":
         dataset = datasets.CIFAR10(root="data", train=True, download=True, transform=transforms)
     elif dataset_name == "Cifar-100":
-        dataset = datasets.CIFAR10(root="data", train=True, download=True, transform=transforms)
+        dataset = datasets.CIFAR100(root="data", train=True, download=True, transform=transforms)
     elif dataset_name == "Flowers":
         dataset = datasets.ImageFolder(root="/kaggle/input/flowers-recognition/flowers", transform=transforms)
 

@@ -1,5 +1,5 @@
 """
-Training   Script Version Apr 10th 2023
+Training   Script Version Apr 17th 2023
 
 
 """
@@ -14,7 +14,7 @@ from DDPM import *
 @dataclass
 class BaseConfig:
     DEVICE = get_default_device()
-    DATASET = "MNIST"  # "MNIST", "Cifar-10", "Cifar-100", "Flowers"
+    DATASET = "Cifar-10"  # "MNIST", "Cifar-10", "Cifar-100", "Flowers"
 
     # Path to log inference images and save checkpoints
     root = "./Logs_Checkpoints"

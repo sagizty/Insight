@@ -10,8 +10,7 @@ What is in it for you? You will be working in a team of AI researchers who have 
 3. Design and conduct the experiments to assess the proposed AI models’ performance.
 4. Collaborate with the team members via discussions, study groups, guiding students/
 interns/research officers.
-5. Periodically present the progress to the group and submit the research findings to top-tier
-journals and conferences
+5. Periodically present the progress to the group and submit the research findings to top-tier journals and conferences. 
 
 # Requirements
 1. Undergraduate, masters or PhD with a strong background in Computer Science, Mathematics, Statistics, Biomedical Engineering or relevant fields.
@@ -30,7 +29,7 @@ Due to the high volume of applicants, I would like to provide some guidelines fo
 6. When submitting your application, please provide a well-formatted email introducing yourself and attach your CV. Thank you.
 
 
-For more information, please email Hwee Kuan Lee (leehk@bii.a-star.edu.sg) and Wei Liu (liuwei@bii.a-star.edu.sg). 
+For more information, please email me (zhang_tianyi@bii.a-star.edu.sg) and CC Hwee Kuan Lee (leehk@bii.a-star.edu.sg) and Wei Liu (liuwei@bii.a-star.edu.sg). 
 Visit the CVPD websites for more informaiton: http://web.bii.a-star.edu.sg/~leehk/ and https://www.a-star.edu.sg/bii/research/ciid/cvpd
 
 Thank you for your interest in our group, and we hope that you find a suitable and fulfilling position.

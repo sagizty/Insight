@@ -13,18 +13,22 @@ import pandas as pd
 from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader
 from torchvision import transforms
+from datasets import load_dataset
+import numpy as np
 import re
-from word2number import w2n  # Optional if you are converting words to numbers
-from huggingface_hub import login
-
-
 # ------------------- Dataset Class for VQA -------------------
-class Tile_VQA_Dataset(Dataset):
-    def __init__(self, dataframe, image_folder, tokenizer_name='gpt2',
+# Preprocessing function to clean up the questions and answers
+def clean_text(text):
+    text = text.lower().strip()
+    text = re.sub(' +', ' ', text).replace(" ?", "?").strip()
+    return text
+
+
+class VQA_Dataset(Dataset):
+    def __init__(self, hf_dataset, tokenizer_name='gpt2',
                  max_seq_length=256, img_size=224, transform=None, answer_to_index=None):
-    
-        self.dataframe = dataframe
-        self.image_folder = image_folder
+
+        self.data = hf_dataset
         self.img_size = img_size
         self.max_seq_length = max_seq_length
 
@@ -49,20 +53,18 @@ class Tile_VQA_Dataset(Dataset):
         self.tokenizer.pad_token = self.tokenizer.eos_token  # pad with eos, (use eos_token as pad_token)
 
     def __len__(self):
-        return len(self.dataframe)
+        return len(self.data)
 
     def __getitem__(self, idx):
         # fetch question, answer and image path from the dataset
-        item = self.dataframe.iloc[idx]
-        image_path = f"{self.image_folder}/{item['image']}"
-        question = item['question']
-        answer = item['answer']  # Use preprocessed answer
+        question = self.data[idx]['question']
+        answer = self.data[idx]['answer']
 
-        # Image Preprocessing
-        img = Image.open(image_path).convert('RGB')
+        # Load the image from Hugging Face dataset
+        image = self.data[idx]['image'].convert('RGB')  # Convert CMYK to RGB if needed
+
         # regardless of greyscale or RGB, Convert to RGB as transformer expects RCG 3 channel input
-        img_tensor = self.transform(img)
-        # todo make here to fit both roi and wsi
+        img_tensor = self.transform(image)
 
         # Tokenize the question using GPT-2 tokenizer
         inputs = self.tokenizer(
@@ -362,15 +364,10 @@ def evaluate(model, dataloader, loss_fn, device):
 
 
 if __name__ == '__main__':
-    # ------------------- Setting Up the Constants -------------------
-    # Load the Excel file
-    excel_path = "./Path_VQA/PathVQA.xlsx"
-    image_folder = "./Path_VQA/Images"
-
     # Constants
     IMG_SIZE = 224
     MAX_SEQ_LENGTH = 256  # Adjust based on typical question length
-    BATCH_SIZE = 16
+    BATCH_SIZE = 8
     EPOCHS = 10
     LEARNING_RATE = 0.0001
     DROP_RATE = 0.1
@@ -379,34 +376,42 @@ if __name__ == '__main__':
 
     tokenizer_name = 'gpt2'
 
-    device = torch.device('cuda:4' if torch.cuda.is_available() else 'cpu')
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     # ------------------- Prepare the excel dataset -------------------
-    # fixme this part Tianyi will build baseded on BigModel later
-    # Read Excel file into pandas DataFrame
-    df = pd.read_excel(excel_path)
+    # Create DataLoaders for batching and loading the data
+    # Download the PathVQA dataset from Hugging Face
+    dataset = load_dataset("flaviagiammarino/path-vqa")
+    # Preprocess and clean the dataset
+    for split in ["train", "validation", "test"]:  # Use "validation" instead of "val"
+        dataset[split] = dataset[split].map(lambda example: {
+            'question': clean_text(example['question']),
+            'answer': clean_text(example['answer'])
+        })
+    # Check available splits
+    print(dataset)
 
-    # Shuffle and split the data into train (75%), validation (15%), and test (10%)
-    train_df, temp_df = train_test_split(df, test_size=0.25, random_state=42)  # 75% train
-    val_df, test_df = train_test_split(temp_df, test_size=0.4, random_state=42)  # 15% validation, 10% test
-
-    # Print dataset sizes to verify
-    print(f"Train Size: {len(train_df)}, Validation Size: {len(val_df)}, Test Size: {len(test_df)}")
-
+    # Extract all answers from train, validation, and test splits
+    all_answers = dataset['train']['answer'] + dataset['validation']['answer'] + dataset['test']['answer']
+    # Get unique answers
+    unique_answers = np.unique(all_answers)
     # Map each unique answer to an index
-    answer_to_index = {ans: idx for idx, ans in enumerate(df['answer'].unique())}
-    num_classes = len(answer_to_index)  # Number of classes
-
+    answer_to_index = {ans: idx for idx, ans in enumerate(unique_answers)}
+    # Number of classes (unique answers)
+    num_classes = len(answer_to_index)
     print(f"Number of unique answers: {num_classes}")
 
     # ------------------- Create Datasets & DataLoaders -------------------
-    train_dataset = Tile_VQA_Dataset(train_df, image_folder, answer_to_index=answer_to_index)
-    val_dataset = Tile_VQA_Dataset(val_df, image_folder, answer_to_index=answer_to_index)
-    test_dataset = Tile_VQA_Dataset(test_df, image_folder, answer_to_index=answer_to_index)
+    train_dataset = VQA_Dataset(hf_dataset=dataset['train'], answer_to_index=answer_to_index)
+    val_dataset = VQA_Dataset(hf_dataset=dataset['validation'], answer_to_index=answer_to_index)
+    test_dataset = VQA_Dataset(hf_dataset=dataset['test'], answer_to_index=answer_to_index)
 
-    train_dataloader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, collate_fn=custom_collate_fn, num_workers=20)
-    val_dataloader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False, collate_fn=custom_collate_fn, num_workers=20)
-    test_dataloader = DataLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=False, collate_fn=custom_collate_fn, num_workers=20)
+    train_dataloader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, collate_fn=custom_collate_fn,
+                                  num_workers=2)
+    val_dataloader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False, collate_fn=custom_collate_fn,
+                                num_workers=2)
+    test_dataloader = DataLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=False, collate_fn=custom_collate_fn,
+                                 num_workers=2)
 
     # ------------------- Build VQA model and task-------------------
     # Initialize model
@@ -417,7 +422,7 @@ if __name__ == '__main__':
                               num_classes=num_classes)
     model = torch.compile(model)
     model.to(device)
-  
+
     optimizer = torch.optim.AdamW(model.parameters(), lr=LEARNING_RATE)
     loss_fn = CrossEntropyLoss()
 
